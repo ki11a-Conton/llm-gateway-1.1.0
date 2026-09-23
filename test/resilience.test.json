@@ -1,0 +1,40 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8806, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 12,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 60000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": false,
+    "retryWaitMs": 300,
+    "maxTotalWaitMs": 8000,
+    "tiered": true,
+    "fallbackShuffle": false,
+    "sessionAffinity": false,
+    "sticky": false,
+    "fallbackAttempts": 1,
+    "fallbackRetryIntervalMs": 100,
+    "balanceCooldownMs": 60000,
+    "authCooldownMs": 60000
+  },
+  "taskLog": { "enabled": true, "dir": "logs-test", "file": "resilience.jsonl", "ringMax": 200 },
+  "channels": [
+    { "name": "pref-dead-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9102", "apiKey": "k", "models": ["tier-fb-model"], "priority": 1, "tier": "preferred", "retries": 1 },
+    { "name": "pref-dead-2", "protocol": "openai", "baseUrl": "http://127.0.0.1:9102", "apiKey": "k", "models": ["tier-fb-model"], "priority": 2, "tier": "preferred", "retries": 1 },
+    { "name": "fb-ok", "protocol": "openai", "baseUrl": "http://127.0.0.1:9101", "apiKey": "k", "models": ["tier-fb-model"], "priority": 99 },
+
+    { "name": "revive-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9133", "apiKey": "k", "models": ["revive-model"], "priority": 5 },
+    { "name": "revive-ok", "protocol": "openai", "baseUrl": "http://127.0.0.1:9101", "apiKey": "k", "models": ["revive-model"], "priority": 99 },
+
+    { "name": "break-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9134", "apiKey": "k", "models": ["break-model"], "priority": 1, "retries": 1 },
+    { "name": "break-ok", "protocol": "openai", "baseUrl": "http://127.0.0.1:9101", "apiKey": "k", "models": ["break-model"], "priority": 2 },
+
+    { "name": "latebreak-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9136", "apiKey": "k", "models": ["latebreak-model"], "priority": 1, "retries": 1 },
+    { "name": "latefallback-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9137", "apiKey": "k", "models": ["latebreak-model"], "priority": 2 }
+  ]
+}

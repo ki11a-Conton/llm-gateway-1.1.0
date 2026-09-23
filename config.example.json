@@ -1,0 +1,277 @@
+{
+  "_usage": [
+    "两种写法：",
+    "  1) 用预设：{\"name\":\"ds\",\"preset\":\"deepseek\",\"apiKey\":\"sk-xxx\"}  —— 推荐，其余字段自动填好",
+    "  2) 完全自定义：不写 preset，手写 protocol/baseUrl/apiKey",
+    "模型池：每家供应商绑一个模型，用 model 字段（等价 models:[model]），不参与自动发现",
+    "  例：{\"name\":\"ds-a\",\"preset\":\"deepseek\",\"apiKey\":\"..\",\"model\":\"deepseek-chat\"}",
+    "  同一个模型名挂多家渠道 = 池子里就有多个备用，路由自动挑健康的那个",
+    "查看所有预设：node server.mjs --list-presets",
+    "自定义预设：复制 providers.example.json 为 providers.json，加自己的条目",
+    "拉取模型：node server.mjs --refresh-models   （会把结果写回本文件的 channels[].models）",
+    "两层重试：第 1 层（渠道内）同一渠道最多 attemptsPerChannel 次请求，每次失败后等 retryPerAttemptMs（未配置回落 retryWaitMs）再试，",
+    "  全部失败才换下一家渠道；第 2 层（跨渠道）所有渠道都废了，等 retryWaitMs 重新轮询一遍。",
+    "  retryMaxWaitMs=0 表示永不放弃（只要客户端还连着就继续重试），>0 则累计等待超限后返回 503。",
+    "  适合上游限流（TPM 429）/ 抖动场景；客户端请求会挂起，agent 的超时设置要够长",
+    "高并发：maxConcurrent / maxConcurrentPerChannel 是全局与单渠道的在途上限，超出排队，queueTimeoutMs 后返回 503；",
+    "  strategy 可选 least-loaded（最少在途优先，多渠道摊负载）；failDedupMs 内同一渠道的并发失败只计一次熔断计数",
+    "多子代理：网关自动从 x-agent-id / body.session_id / metadata.conversation_id / user 识别子代理，",
+    "  maxConcurrentPerAgent 给每个子代理独立配额；sessionAffinity 让同一子代理在 affinityTtlMs 内复用上次成功的渠道；",
+    "  用 GET /api/metrics（带 apiKey）查看在途/排队/每代理用量",
+    "池子总入口：unifiedModel 填一个统一名（如 \"auto\"）后，/v1/models 只显示它；",
+    "  调用它会路由到池子里任何一个可用的渠道（各家用自己绑定的模型）。不填则显示全部真实模型名",
+    "兜底模型：fallbackModel 填池子里存在的模型名（如 \"deepseek-chat\"），",
+    "  客户端/agent 传来池子里没有的模型名时（如 agent 的 'auto'）自动改调它，不填则报 model_not_found"
+  ],
+
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8787,
+    "apiKey": "PROXY_MANAGED",
+    "panel": true
+  },
+
+  "routing": {
+    "_note_strategy": "priority | round-robin | weighted | least-loaded（多子代理并发推荐）。round-robin 是『每个请求轮换起点』，只在 sticky=false 时生效——sticky 与会话亲和都会把请求钉死在同一家，和轮询语义互斥。weighted = 按优先级加权的轮询：高优先渠道拿大头、低优先也持续参与，输出是交错的（不会出现『前 N 个请求全是同一家』的突发）",
+    "strategy": "priority",
+    "_note_sticky": "true = provider 钉选：上次成功的渠道反复复用，直至失败；失败后随机池每家再试 fallbackAttempts-1 次仍不行才换下一家",
+    "sticky": true,
+
+    "_note_tiered": "两段式选路：第1段 preferred（默认按 baseUrl 域名识别 sensenova.cn / api.b.ai）按优先级排序（strategy=round-robin 且 sticky=false 时每个请求轮换起点，把这一段摊开用）；第2段其余供应商随机/钉选",
+    "tiered": true,
+    "preferredBaseUrls": ["sensenova.cn", "api.b.ai"],
+    "fallbackAttempts": 3,
+    "fallbackRetryIntervalMs": 3000,
+    "fallbackShuffle": true,
+
+    "_note_priorityWeights": "仅 strategy=weighted 时生效。把优先级映射成权重：键是优先级『上界』，取第一个 priority <= 键 的档。默认分档 10→8 / 30→4 / 60→2 / 100→1，即 priority 1-10 拿约 8/15 的流量、>60 的拿约 1/15。想让所有渠道平均分就全填同一个权重；想只用优先池则配合 tiered=true",
+    "priorityWeights": null,
+
+    "_note_halfOpen": "熔断到期后的半开窗口（毫秒）：窗口内该渠道最多放 halfOpenMaxInFlight 个在途请求去试探，其余请求继续跳过它——恢复了就立刻回到满份额，没好也不会被一批请求同时打爆。注意冷却中的渠道始终留在候选列表里（只垫到最后，不剔除）。填 0 关闭半开，等价于『冷却一到就恢复满份额』的旧行为",
+    "halfOpenMs": 15000,
+    "halfOpenMaxInFlight": 1,
+
+    "maxAttempts": 4,
+    "timeoutMs": 180000,
+    "_note_firstByteTimeoutMs": "首字节看门狗：从发出请求到收到响应头的最长等待。与 timeoutMs（全程）、streamIdleTimeoutMs（静默）并行计时、取最严的一个，不叠加。默认取渠道的 timeoutMs。上游『接了连接却迟迟不给响应头』是真实故障形态，没有这一层就只能干等到 timeoutMs",
+    "firstByteTimeoutMs": null,
+    "streamIdleTimeoutMs": 120000,
+    "_note_writeDrainTimeoutMs": "写回背压等待上限：客户端停止读取（既不读也不断开）时，等 drain 多久就判定客户端已断开。默认取 streamIdleTimeoutMs。判为 kind=client_abort（499、可重试=false）且**不计入渠道失败**——上游没做错什么，是客户端不读",
+    "writeDrainTimeoutMs": null,
+    "failThreshold": 2,
+    "cooldownMs": 30000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 60000,
+    "discoverIntervalMs": 600000,
+
+    "attemptsPerChannel": 2,
+    "retryPerAttemptMs": null,
+    "retryLoop": false,
+    "retryWaitMs": 15000,
+    "retryMaxWaitMs": 120000,
+    "_note_maxTotalWaitMs": "单请求总等待预算，超过就返回结果——绝不无限挂住 agent 的请求；0=不限",
+    "maxTotalWaitMs": 600000,
+
+    "_note_失败处理": "余额不足/鉴权失败 = 重试也没用：不撞第二枪，立刻换家 + 长冷却（到期自动半开试探）",
+    "disableOnBalanceError": true,
+    "balanceCooldownMs": 900000,
+    "disableOnAuthError": true,
+    "authCooldownMs": 600000,
+
+    "_note_思考": "能思考的模型统一注入目标档位 reasoning_effort（按模型名白名单判断，见 lib/util.mjs THINKING_MODEL_RE）；各家思考字段归一到 reasoning_content，混进正文的思维链拆出去",
+    "forceMaxEffort": true,
+    "_note_maxEffort": "目标思考档位 low|medium|high|xhigh，未配时按 high。默认策略是全局拉最高档（实测 xhigh 是各家普遍接受的最高档，非法值 max 不在档位表里）；吃不下最高档的渠道用渠道级 maxEffort 单独 pin 低一档（见 channels 里的 my-provider-c）。上游 400 报 ReasoningEffort invalid 时同渠道自动降为 high 重试一次，不打穿渠道链",
+    "maxEffort": "xhigh",
+    "reasoningGuard": true,
+    "_note_reasoningGuardStream": "流式方向是否做思考守卫（思维链拆分 + 空响应检测）。false=流式完全跳过思考守卫（只留工具守卫）换取更低首字延迟；实测上游已用 reasoning_content 承载思考时，开启的代价≈0（见 README §7 首字延迟量测）",
+    "reasoningGuardStream": true,
+    "_note_emptyMinChars": "\"伪空\"阈值：正文去掉空白/标点/markdown 装饰后剩余有效字符数低于该值即视为不可用（HTTP 200 但只有 \".\" 或空代码围栏）-> 换下一家。默认 1 只拦\"一个有效字符都不剩\"，不误伤正常短回答",
+    "emptyMinChars": 1,
+    "_note_thinkingMaxTokensPolicy": "思考预算策略。raise（默认）：为满足官方 budget_tokens < max_tokens，把 max_tokens 抬到 budget+1024（必要时夹在渠道上限内）——客户端写 max_tokens:100 会被抬到渠道上限。drop-thinking：客户端 max_tokens 是硬意图，宁可这次不思考也绝不放大（放不下思考时日志 warn 一次并放弃 thinking，max_tokens 保持客户端值）",
+    "thinkingMaxTokensPolicy": "raise",
+    "_note_cacheControl": "prompt caching 的 cache_control 标记无需配置：网关只做保真透传（不自动注入、不丢弃），客户端在内容块上写 cache_control 即可，走到 Anthropic 协议渠道时按原块位置重新发出",
+
+    "sessionAffinity": true,
+    "affinityTtlMs": 600000,
+    "maxConcurrentPerAgent": 16,
+
+    "maxConcurrent": 128,
+    "maxConcurrentPerChannel": 32,
+    "queueTimeoutMs": 60000,
+    "failDedupMs": 2000,
+
+    "_note_unsupported": "上游明确回报『模型不存在/不支持』时，把该模型临时从这家摘掉，避免每个请求都白撞一遍。带 TTL 且有条目上限：一次误判不会让渠道对该模型永久失效，也不会被任意模型名撑爆",
+    "unsupportedTtlMs": 1800000,
+    "unsupportedMax": 200,
+
+    "guardToolCallText": true
+  },
+
+  "_note_taskLog": "任务日志：每个请求一条 JSONL（完整尝试链 + 错误指纹），/api/tasks 与 /api/errors 查询；enabled=false 只留内存环形缓冲",
+  "_note_taskLog2": "落盘的错误文本会自动脱敏（sk-…/Bearer …/apiKey=… -> ***REDACTED***），内存环形缓冲保留原文；超过 maxFileBytes 轮转为 tasks.1.jsonl…，只保留 keepFiles 档；查询支持 ?since/?until 时间窗",
+  "taskLog": {
+    "enabled": true,
+    "dir": "logs",
+    "file": "tasks.jsonl",
+    "ringMax": 500,
+    "maxFileBytes": 33554432,
+    "keepFiles": 5
+  },
+
+  "unifiedModel": "",
+  "fallbackModel": "",
+
+  "modelMap": {
+    "_note": "客户端传来的模型名 -> 网关内部逻辑模型名。不需要就删掉整个 modelMap",
+    "claude-sonnet-4-20250514": "claude-sonnet-4",
+    "claude-opus-4-20250514": "claude-opus-4"
+  },
+
+  "effortMap": {
+    "_note": "思考强度 -> 模型名改写：请求带 reasoning_effort 时按此映射改写模型再路由。",
+    "_note2": "适用'同一供应商不同强度是不同模型名'的情况（如 DeepSeek）。不需要就删掉整个 effortMap",
+    "deepseek-chat": { "high": "deepseek-reasoner" }
+  },
+
+  "routes": {
+    "_note": "显式指定某个模型优先走哪些渠道（按数组顺序）。不指定则按 priority 自动选路"
+  },
+
+  "pricing": {
+    "_note": "Token 价格计费：单价单位是【每 100 万 token 的金额】，用它把用量折算成费用（只做估算展示，不是扣费依据）",
+    "_note_match": "模型名匹配顺序：① 精确匹配 ② 前缀* 通配（多个命中取最长前缀）。没配到价格的模型金额为 null、面板显示「未配置价格」，绝不当 0 算",
+    "_note_currency": "currency / symbol 只影响显示，不做汇率换算；整段不写就用内置参考价目表（USD / $）",
+    "_note_builtin": "内置参考价只是价格快照、可能过期，以各家官方价目表为准；同名条目会被这里的配置覆盖",
+    "_note_invalid": "脏价目（NaN / Infinity / 字符串 / 负数）会被忽略，当成没配这条；显式写 input:0/output:0 是有效的免费定价",
+    "currency": "USD",
+    "symbol": "$",
+    "models": {
+      "deepseek-chat": { "input": 0.28, "output": 0.42 },
+      "my-model": { "input": 1.2, "output": 3.4 },
+      "gpt-*": { "input": 2.0, "output": 8.0 }
+    }
+  },
+
+  "channels": [
+    {
+      "name": "deepseek",
+      "preset": "deepseek",
+      "apiKey": "${DEEPSEEK_API_KEY}",
+      "priority": 10
+    },
+    {
+      "_note": "腾讯 WorkBuddy（国际版）账号：apiKey=access_token，一账号一条。面板「添加渠道 → workbuddy-intl → 设备码授权」可自动落号；或手动粘贴（含 refreshToken 则每小时自动续期+刷新余额）。出站默认走 127.0.0.1:7897 代理，无代理时写 \"proxy\": \"\" 清空。仅绑定 deepseek-v4.1-flash",
+      "name": "wb-intl-example",
+      "preset": "workbuddy-intl",
+      "apiKey": "${WORKBUDDY_ACCESS_TOKEN}",
+      "model": "deepseek-v4.1-flash",
+      "priority": 60,
+      "refreshToken": "${WORKBUDDY_REFRESH_TOKEN}",
+      "headers": { "X-User-Id": "${WORKBUDDY_USER_ID}" },
+      "enabled": false
+    },
+    {
+      "name": "anthropic",
+      "preset": "anthropic",
+      "apiKey": "${ANTHROPIC_API_KEY}",
+      "priority": 10,
+      "maxTokens": 8192,
+      "alias": {
+        "claude-sonnet-4": "claude-sonnet-4-5",
+        "claude-opus-4": "claude-opus-4-1"
+      }
+    },
+    {
+      "name": "openai",
+      "preset": "openai",
+      "apiKey": "${OPENAI_API_KEY}",
+      "priority": 20
+    },
+    {
+      "name": "openrouter",
+      "preset": "openrouter",
+      "apiKey": "${OPENROUTER_API_KEY}",
+      "priority": 30
+    },
+    {
+      "name": "siliconflow",
+      "preset": "siliconflow",
+      "apiKey": "${SILICONFLOW_API_KEY}",
+      "priority": 40
+    },
+    {
+      "name": "zhipu",
+      "preset": "zhipu",
+      "apiKey": "${ZHIPU_API_KEY}",
+      "priority": 40
+    },
+    {
+      "name": "moonshot",
+      "preset": "moonshot",
+      "apiKey": "${MOONSHOT_API_KEY}",
+      "priority": 40
+    },
+    {
+      "name": "dashscope",
+      "preset": "dashscope",
+      "apiKey": "${DASHSCOPE_API_KEY}",
+      "priority": 50
+    },
+    {
+      "name": "volcengine",
+      "preset": "volcengine",
+      "apiKey": "${ARK_API_KEY}",
+      "priority": 50
+    },
+    {
+      "name": "ollama",
+      "preset": "ollama",
+      "priority": 90,
+      "enabled": false
+    },
+    {
+      "name": "my-proxy",
+      "_note": "完全自定义的渠道示例：不写 preset，手写全部字段。用不上就删掉",
+      "protocol": "openai",
+      "baseUrl": "https://my-proxy.example.com/v1",
+      "apiKey": "",
+      "priority": 60,
+      "enabled": false,
+      "chatPath": "/chat/completions",
+      "modelsPath": "/models",
+      "headers": {},
+      "models": [],
+      "description": "路径不规则的中转可改 chatPath / modelsPath"
+    },
+    {
+      "name": "my-provider-a",
+      "_note": "模型池写法示例：这家渠道只提供 gpt-5 这一个模型（等价 models:[\"gpt-5\"]）",
+      "preset": "myproxy",
+      "apiKey": "",
+      "model": "gpt-5",
+      "effort": "high",
+      "priority": 10,
+      "enabled": false
+    },
+    {
+      "name": "my-provider-b",
+      "_note": "同名模型挂到另一家渠道，池子里 gpt-5 就有 2 个备用，路由自动挑健康的。effort 标 low：请求带 reasoning_effort=low 时优先走它",
+      "preset": "myproxy",
+      "apiKey": "",
+      "model": "gpt-5",
+      "effort": "low",
+      "priority": 20,
+      "enabled": false
+    },
+    {
+      "name": "my-provider-c",
+      "_note": "思考档位 pin 示例：默认全局拉最高档（routing.maxEffort=xhigh），这家吃不下最高档就单独降一档。上游开高档会把 max_tokens 全烧在思考上、正文返回空，这种 200 空响应不走 400 降级兜底，只能靠 pin",
+      "preset": "myproxy",
+      "apiKey": "",
+      "model": "gpt-5",
+      "maxEffort": "high",
+      "priority": 30,
+      "enabled": false
+    }
+  ]
+}

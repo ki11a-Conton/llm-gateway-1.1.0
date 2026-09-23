@@ -1,0 +1,35 @@
+{
+  "_note": "思考档位(maxEffort)回归专用: mock 9143 回显 reasoning_effort; ch-reject 在 xhigh 上模拟上游 400 测同渠道降档重试",
+  "server": { "host": "127.0.0.1", "port": 8806, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 3,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 60000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": false,
+    "retryWaitMs": 200,
+    "retryMaxWaitMs": 2000,
+    "maxTotalWaitMs": 8000,
+    "tiered": false,
+    "fallbackShuffle": false,
+    "sessionAffinity": false,
+    "sticky": false,
+    "forceMaxEffort": true,
+    "reasoningGuard": true,
+    "reasoningGuardStream": false,
+    "maxEffort": "high"
+  },
+  "taskLog": { "enabled": false },
+  "channels": [
+    { "name": "ch-default", "protocol": "openai", "baseUrl": "http://127.0.0.1:9143", "apiKey": "k", "models": ["think-plain"], "priority": 10 },
+    { "name": "ch-xhigh", "protocol": "openai", "baseUrl": "http://127.0.0.1:9143", "apiKey": "k", "models": ["think-xhigh"], "maxEffort": "xhigh", "priority": 10 },
+    { "name": "ch-pin", "protocol": "openai", "baseUrl": "http://127.0.0.1:9143", "apiKey": "k", "models": ["think-pin"], "maxEffort": "high", "priority": 10 },
+    { "name": "ch-reject", "protocol": "openai", "baseUrl": "http://127.0.0.1:9143", "apiKey": "k", "models": ["think-reject"], "maxEffort": "xhigh", "retries": 1, "priority": 10 },
+    { "name": "ch-nothink", "protocol": "openai", "baseUrl": "http://127.0.0.1:9143", "apiKey": "k", "models": ["qwen3.8-flash"], "priority": 10 }
+  ]
+}

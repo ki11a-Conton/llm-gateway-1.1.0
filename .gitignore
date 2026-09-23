@@ -1,0 +1,25 @@
+# 保管好你的密钥
+config.json
+# 自定义 provider 预设（可覆盖内置供应商端点，可能含密钥）。
+# README 的文件结构里一直写着它「已 gitignore」，但这条规则此前漏了，补上。
+providers.json
+*.local.json
+
+node_modules/
+.DS_Store
+*.log
+
+# 任务日志（每次请求一条 JSONL，含上游错误文本，属于运行时产物，不入库）
+logs/
+logs-test/
+
+# ---- 发布安全：以下为个人/内部产物，默认不进公开仓库 ----
+# 个人测试实例配置（含本机代理端口等个人环境信息）
+config.wbtest.json
+# AI 工具的记忆/会话元数据，不属于项目源码
+.workbuddy-ai/
+# 打包产物
+dist/
+# 内部任务书：含第三方渠道的私有端点与逆向结论，默认不公开。
+# 若要随仓库一起发布，删掉下面这一行即可。
+docs/workbuddy-intl-task.md

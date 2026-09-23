@@ -1,0 +1,51 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8797,
+    "apiKey": "TESTKEY"
+  },
+  "routing": {
+    "strategy": "least-loaded",
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "maxAttempts": 3,
+    "failThreshold": 99,
+    "attemptsPerChannel": 1,
+    "retryPerAttemptMs": 0,
+    "retryLoop": false,
+    "retryMaxWaitMs": 0,
+    "sessionAffinity": true,
+    "affinityTtlMs": 600000,
+    "maxConcurrentPerAgent": 2,
+    "maxConcurrent": 64,
+    "maxConcurrentPerChannel": 64,
+    "queueTimeoutMs": 3000,
+    "failDedupMs": 0
+  },
+  "channels": [
+    {
+      "name": "ca",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9121",
+      "apiKey": "k",
+      "model": "m1",
+      "priority": 10
+    },
+    {
+      "name": "cb",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9122",
+      "apiKey": "k",
+      "model": "m1",
+      "priority": 10
+    },
+    {
+      "name": "cc",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9123",
+      "apiKey": "k",
+      "model": "m1",
+      "priority": 10
+    }
+  ]
+}

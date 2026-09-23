@@ -1,0 +1,30 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8799, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "tiered": false,
+    "maxAttempts": 20,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 50,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": true,
+    "retryWaitMs": 200
+  },
+  "channels": [
+    { "name": "pA",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9116", "apiKey": "k", "models": ["dead-model"],     "priority": 1, "retries": 6 },
+    { "name": "pB",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9112", "apiKey": "k", "models": ["dead-model", "g1-model"], "priority": 2, "retries": 2 },
+    { "name": "pA429", "protocol": "openai", "baseUrl": "http://127.0.0.1:9108", "apiKey": "k", "models": ["flaky-429"],     "priority": 1, "retries": 3 },
+    { "name": "pB2",   "protocol": "openai", "baseUrl": "http://127.0.0.1:9113", "apiKey": "k", "models": ["flaky-429", "g2-model"], "priority": 2, "retries": 2 },
+    { "name": "pC",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9118", "apiKey": "k", "models": ["budget-model"],  "priority": 1, "retries": 6 },
+    { "name": "pD",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9116", "apiKey": "k", "models": ["budget-model"],  "priority": 2, "retries": 2 },
+    { "name": "pE",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9118", "apiKey": "k", "models": ["loop-model"],     "priority": 1, "retries": 2 },
+    { "name": "pF",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9116", "apiKey": "k", "models": ["loop-model"],     "priority": 2, "retries": 2 },
+    { "name": "sA",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9108", "apiKey": "k", "models": ["tpm-chain"],     "priority": 1, "retries": 6 },
+    { "name": "sB",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9108", "apiKey": "k", "models": ["tpm-chain"],     "priority": 2, "retries": 6 },
+    { "name": "bA",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9108", "apiKey": "k", "models": ["tpm-chain"],     "priority": 3, "retries": 6 },
+    { "name": "bB",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9108", "apiKey": "k", "models": ["tpm-chain"],     "priority": 4, "retries": 6 },
+    { "name": "ok1",   "protocol": "openai", "baseUrl": "http://127.0.0.1:9112", "apiKey": "k", "models": ["tpm-chain"],     "priority": 5, "retries": 6 }
+  ]
+}

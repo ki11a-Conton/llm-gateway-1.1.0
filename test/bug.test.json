@@ -1,0 +1,24 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8794, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "tiered": false,
+    "maxAttempts": 3,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 30000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": true,
+    "retryWaitMs": 300,
+    "retryMaxWaitMs": 30000
+  },
+  "unifiedModel": "auto",
+  "channels": [
+    { "name": "b-404", "protocol": "openai", "baseUrl": "http://127.0.0.1:9107", "apiKey": "k", "model": "ghost-model", "priority": 10 },
+    { "name": "a-429", "protocol": "openai", "baseUrl": "http://127.0.0.1:9108", "apiKey": "k", "model": "flaky-429", "priority": 20, "retries": 1 },
+    { "name": "c-good", "protocol": "openai", "baseUrl": "http://127.0.0.1:9110", "apiKey": "k", "model": "ok-model", "priority": 30 }
+  ]
+}

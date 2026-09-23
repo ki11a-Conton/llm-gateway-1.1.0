@@ -1,0 +1,17 @@
+{
+  "name": "llm-gateway",
+  "version": "1.1.0",
+  "private": true,
+  "type": "module",
+  "description": "零依赖多渠道路由网关（OpenAI / Anthropic 协议互转，选路 / 熔断 / 限流 / 任务日志）",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node test/run-all.mjs",
+    "test:one": "node test/run-all.mjs --only",
+    "package": "node tools/package.mjs",
+    "package:list": "node tools/package.mjs --list"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

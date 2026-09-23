@@ -1,0 +1,5 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8831, "apiKey": "TESTKEY", "panel": true },
+  "routing": { "probeIntervalMs": 0, "discoverIntervalMs": 0, "maxAttempts": 2 },
+  "channels": []
+}

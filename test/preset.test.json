@@ -1,0 +1,18 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8792, "apiKey": "TESTKEY" },
+  "routing": { "probeIntervalMs": 0, "discoverIntervalMs": 0 },
+  "channels": [
+    {
+      "name": "from-preset",
+      "preset": "mock-preset",
+      "apiKey": "k"
+    },
+    {
+      "name": "preset-overridden",
+      "preset": "mock-preset",
+      "baseUrl": "http://127.0.0.1:9103",
+      "protocol": "anthropic",
+      "apiKey": "k"
+    }
+  ]
+}

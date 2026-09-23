@@ -1,0 +1,29 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8795,
+    "apiKey": "TESTKEY"
+  },
+  "routing": {
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "maxAttempts": 4,
+    "failThreshold": 50,
+    "retryLoop": false,
+    "retryWaitMs": 200,
+    "retryMaxWaitMs": 0,
+    "attemptsPerChannel": 2,
+    "retryPerAttemptMs": 100,
+    "tiered": false
+  },
+  "channels": [
+    {
+      "name": "always-bad",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9102",
+      "apiKey": "k",
+      "model": "bad-model",
+      "priority": 10
+    }
+  ]
+}

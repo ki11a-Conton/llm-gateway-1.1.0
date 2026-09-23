@@ -1,0 +1,35 @@
+{
+  "measuredAt": "2026-09-14T03:31:20.175Z",
+  "node": "v24.18.1",
+  "platform": "win32",
+  "runs": 7,
+  "upstreamPauseMs": 400,
+  "results": {
+    "guardOn": {
+      "label": "① 攒头部（正文 <64 字符 + 上游停顿 400ms）",
+      "model": "ttft-model",
+      "runs": 7,
+      "min": 417,
+      "median": 435,
+      "max": 443
+    },
+    "guardOff": {
+      "label": "② 立即放行（不做流式思考守卫）",
+      "model": "ttft-model",
+      "runs": 7,
+      "min": 16,
+      "median": 32,
+      "max": 36
+    },
+    "guardOnSeparated": {
+      "label": "③ 命中 reasoning_content 提前放行",
+      "model": "reason-model",
+      "runs": 7,
+      "min": 23,
+      "median": 31,
+      "max": 33
+    }
+  },
+  "overheadMedianMs": 403,
+  "earlyReleaseDeltaMedianMs": -1
+}

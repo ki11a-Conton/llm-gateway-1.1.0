@@ -1,0 +1,30 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8795, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "round-robin",
+    "sticky": true,
+    "maxAttempts": 4,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 30000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": true,
+    "retryWaitMs": 2000,
+    "retryMaxWaitMs": 60000,
+    "_note": "本套测试验证的是『第一段优先池』的轮询/粘性/重试语义；这些语义只在 preferred 池内生效，因此全部渠道标 tier=preferred"
+  },
+  "unifiedModel": "auto",
+  "channels": [
+    { "name": "burn",  "protocol": "openai", "baseUrl": "http://127.0.0.1:9102", "apiKey": "k", "model": "burn-model",  "priority": 10, "tier": "preferred" },
+    { "name": "t-429", "protocol": "openai", "baseUrl": "http://127.0.0.1:9108", "apiKey": "k", "model": "t429-model",  "priority": 50, "retries": 1, "tier": "preferred" },
+    { "name": "r-bad", "protocol": "openai", "baseUrl": "http://127.0.0.1:9111", "apiKey": "k", "model": "rbad-model",  "priority": 70, "tier": "preferred" },
+    { "name": "g1",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9112", "apiKey": "k", "models": ["g1-model", "t429-model", "rbad-model", "burn-model"], "priority": 90, "tier": "preferred" },
+    { "name": "g2",    "protocol": "openai", "baseUrl": "http://127.0.0.1:9113", "apiKey": "k", "models": ["g2-model"], "priority": 90, "tier": "preferred" },
+    { "name": "r1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9112", "apiKey": "k", "models": ["g1-model"], "priority": 20 },
+    { "name": "r2", "protocol": "openai", "baseUrl": "http://127.0.0.1:9113", "apiKey": "k", "models": ["g1-model"], "priority": 30 },
+    { "name": "r3", "protocol": "openai", "baseUrl": "http://127.0.0.1:9112", "apiKey": "k", "models": ["g1-model"], "priority": 40 }
+  ]
+}

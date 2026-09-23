@@ -1,0 +1,9 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8797, "apiKey": "TESTKEY" },
+  "routing": { "probeIntervalMs": 0, "discoverIntervalMs": 0 },
+  "channels": [
+    { "name": "good",     "protocol": "openai", "baseUrl": "http://127.0.0.1:9101", "apiKey": "k", "model": "good-model" },
+    { "name": "chatdead", "protocol": "openai", "baseUrl": "http://127.0.0.1:9116", "apiKey": "k", "model": "dead-model" },
+    { "name": "nomodel",  "protocol": "openai", "baseUrl": "http://127.0.0.1:9101", "apiKey": "k" }
+  ]
+}

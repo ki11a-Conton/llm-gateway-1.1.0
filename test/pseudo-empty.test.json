@@ -1,0 +1,23 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8805, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 6,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 60000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": false,
+    "retryWaitMs": 200,
+    "maxTotalWaitMs": 8000,
+    "tiered": false,
+    "emptyMinChars": 1
+  },
+  "channels": [
+    { "name": "pseudo-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9129", "apiKey": "k", "models": ["pseudo-model"], "priority": 1 },
+    { "name": "ok-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9101", "apiKey": "k", "models": ["pseudo-model"], "priority": 99 }
+  ]
+}

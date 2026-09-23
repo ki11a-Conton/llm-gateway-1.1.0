@@ -1,0 +1,24 @@
+{
+  "server": { "host": "127.0.0.1", "port": 0, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "round-robin",
+    "sticky": false,
+    "sessionAffinity": false,
+    "tiered": true,
+    "maxAttempts": 99,
+    "unsupportedTtlMs": 600000,
+    "unsupportedMax": 200,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "_note": "路由加固回归用；优先池 4 家故意给【互不相同】的 priority，复现真实的『轮不动』形状"
+  },
+  "unifiedModel": "auto",
+  "channels": [
+    { "name": "pf1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9201", "apiKey": "k", "model": "shared-model", "priority": 1, "tier": "preferred" },
+    { "name": "pf2", "protocol": "openai", "baseUrl": "http://127.0.0.1:9202", "apiKey": "k", "model": "shared-model", "priority": 2, "tier": "preferred" },
+    { "name": "pf3", "protocol": "openai", "baseUrl": "http://127.0.0.1:9203", "apiKey": "k", "model": "shared-model", "priority": 3, "tier": "preferred" },
+    { "name": "pf4", "protocol": "openai", "baseUrl": "http://127.0.0.1:9204", "apiKey": "k", "model": "shared-model", "priority": 4, "tier": "preferred" },
+    { "name": "fb1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9205", "apiKey": "k", "model": "shared-model", "priority": 5 },
+    { "name": "wild", "protocol": "openai", "baseUrl": "http://127.0.0.1:9206", "apiKey": "k", "priority": 9 }
+  ]
+}

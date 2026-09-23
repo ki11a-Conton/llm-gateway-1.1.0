@@ -1,0 +1,39 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8793, "apiKey": "TESTKEY" },
+  "routing": { "probeIntervalMs": 0, "discoverIntervalMs": 0, "tiered": false },
+  "fallbackModel": "claude-test",
+  "unifiedModel": "auto",
+  "channels": [
+    {
+      "name": "ds-1",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "k",
+      "model": "deepseek-chat",
+      "priority": 10
+    },
+    {
+      "name": "ds-2",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9102",
+      "apiKey": "k",
+      "model": "deepseek-chat",
+      "priority": 20
+    },
+    {
+      "name": "claude-1",
+      "protocol": "anthropic",
+      "baseUrl": "http://127.0.0.1:9103",
+      "apiKey": "k",
+      "model": "claude-test",
+      "priority": 5
+    },
+    {
+      "name": "nokey",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "",
+      "model": "gpt-5"
+    }
+  ]
+}

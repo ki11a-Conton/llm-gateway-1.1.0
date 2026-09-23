@@ -1,0 +1,21 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8809, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 4,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 60000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": false,
+    "tiered": false,
+    "reasoningGuard": true,
+    "reasoningGuardStream": true
+  },
+  "channels": [
+    { "name": "ttft-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9135", "apiKey": "k", "models": ["ttft-model"], "priority": 5 },
+    { "name": "ttft-reason-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9128", "apiKey": "k", "models": ["reason-model"], "priority": 5 }
+  ]
+}

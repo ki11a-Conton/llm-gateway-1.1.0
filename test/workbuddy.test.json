@@ -1,0 +1,60 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8812, "apiKey": "TESTKEY" },
+  "proxy": "http://127.0.0.1:9145",
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 3,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 60000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": true,
+    "retryWaitMs": 200,
+    "maxTotalWaitMs": 8000,
+    "tiered": false,
+    "fallbackShuffle": false,
+    "sessionAffinity": false,
+    "sticky": false,
+    "fallbackAttempts": 1,
+    "fallbackRetryIntervalMs": 100,
+    "balanceCooldownMs": 60000,
+    "authCooldownMs": 60000,
+    "proxy": ""
+  },
+  "taskLog": { "enabled": false },
+  "channels": [
+    {
+      "name": "wb-direct",
+      "preset": "workbuddy-intl",
+      "baseUrl": "http://127.0.0.1:9141/v2",
+      "apiKey": "tok-direct",
+      "models": ["deepseek-v4.1-flash"],
+      "priority": 10,
+      "proxy": "",
+      "headers": { "X-User-Id": "uid-1" }
+    },
+    {
+      "name": "wb-proxy",
+      "preset": "workbuddy-intl",
+      "baseUrl": "http://127.0.0.1:9141/v2",
+      "apiKey": "tok-proxy",
+      "models": ["wb-proxy-model"],
+      "priority": 20,
+      "proxy": "http://127.0.0.1:9145",
+      "headers": { "X-User-Id": "uid-2" }
+    },
+    {
+      "name": "wb-sanitize",
+      "preset": "workbuddy-intl",
+      "baseUrl": "http://127.0.0.1:9142/v2",
+      "apiKey": "tok-san",
+      "models": ["wb-sanitize-model"],
+      "priority": 30,
+      "proxy": "",
+      "headers": { "X-User-Id": "uid-3" }
+    }
+  ]
+}

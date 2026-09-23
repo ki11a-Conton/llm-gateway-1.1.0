@@ -1,0 +1,55 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8813, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "sticky": false,
+    "sessionAffinity": false,
+    "tiered": true,
+    "maxAttempts": 1,
+    "attemptsPerChannel": 1,
+    "retryPerAttemptMs": 50,
+    "fallbackAttempts": 1,
+    "fallbackRetryIntervalMs": 50,
+    "fallbackShuffle": false,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 500,
+    "failThreshold": 1,
+    "cooldownMs": 30000,
+    "maxCooldownMs": 300000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": true,
+    "retryWaitMs": 250,
+    "retryMaxWaitMs": 250,
+    "maxTotalWaitMs": 6000,
+    "balanceCooldownMs": 60000,
+    "authCooldownMs": 60000,
+    "maxConcurrent": 1,
+    "maxConcurrentPerChannel": 0,
+    "maxConcurrentPerAgent": 0,
+    "queueTimeoutMs": 800
+  },
+  "taskLog": { "enabled": true, "dir": "logs-test", "file": "proxy-hardening.jsonl", "ringMax": 50 },
+  "channels": [
+    { "name": "ok-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9170", "apiKey": "k", "models": ["ok-model", "empty-stream-model", "non-sse-model", "anth-empty-model"], "priority": 99 },
+
+    { "name": "slow-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9171", "apiKey": "k", "models": ["slow-model"], "priority": 1, "tier": "preferred" },
+    { "name": "abort-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9171", "apiKey": "k", "models": ["abort-model"], "priority": 1, "tier": "preferred" },
+    { "name": "overload-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9183", "apiKey": "k", "models": ["overload-model"], "priority": 1, "tier": "preferred" },
+
+    { "name": "headers-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9172", "apiKey": "k", "models": ["headers-model"], "priority": 1, "tier": "preferred" },
+    { "name": "headers-stream-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9173", "apiKey": "k", "models": ["headers-stream-model"], "priority": 1, "tier": "preferred" },
+    { "name": "midsilence-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9178", "apiKey": "k", "models": ["midsilence-model"], "priority": 1, "tier": "preferred" },
+    { "name": "flood-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9184", "apiKey": "k", "models": ["flood-model"], "priority": 1, "tier": "preferred" },
+
+    { "name": "empty-stream-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9174", "apiKey": "k", "models": ["empty-stream-model"], "priority": 1, "tier": "preferred" },
+    { "name": "non-sse-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9175", "apiKey": "k", "models": ["non-sse-model"], "priority": 1, "tier": "preferred" },
+    { "name": "anth-empty-1", "protocol": "anthropic", "baseUrl": "http://127.0.0.1:9176", "apiKey": "k", "models": ["anth-empty-model"], "priority": 1, "tier": "preferred" },
+    { "name": "dead-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9177", "apiKey": "k", "models": ["dead-model"], "priority": 1, "tier": "preferred" },
+
+    { "name": "rp-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9179", "apiKey": "k", "models": ["round-model"], "priority": 1, "tier": "preferred" },
+    { "name": "rp-2", "protocol": "openai", "baseUrl": "http://127.0.0.1:9170", "apiKey": "k", "models": ["round-model"], "priority": 2, "tier": "preferred" },
+    { "name": "rp-3", "protocol": "openai", "baseUrl": "http://127.0.0.1:9170", "apiKey": "k", "models": ["round-model"], "priority": 3, "tier": "preferred" },
+    { "name": "rf-fail", "protocol": "openai", "baseUrl": "http://127.0.0.1:9182", "apiKey": "k", "models": ["round-model"], "priority": 99 }
+  ]
+}

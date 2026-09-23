@@ -1,0 +1,13 @@
+{
+  "server": { "host": "127.0.0.1", "port": 0, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "least-loaded",
+    "maxConcurrent": 7,
+    "_note": "故意渠道名重复；用来验证热重载失败时【不会】留下半应用的运行时状态"
+  },
+  "unifiedModel": "auto",
+  "channels": [
+    { "name": "dup", "protocol": "openai", "baseUrl": "http://127.0.0.1:9201", "apiKey": "k", "model": "shared-model" },
+    { "name": "dup", "protocol": "openai", "baseUrl": "http://127.0.0.1:9202", "apiKey": "k", "model": "shared-model" }
+  ]
+}

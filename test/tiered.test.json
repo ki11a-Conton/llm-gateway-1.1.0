@@ -1,0 +1,42 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8802, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 12,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 60000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": true,
+    "retryWaitMs": 300,
+    "retryMaxWaitMs": 5000,
+    "maxTotalWaitMs": 15000,
+    "tiered": true,
+    "fallbackShuffle": false,
+    "sessionAffinity": false,
+    "sticky": false,
+    "fallbackAttempts": 2,
+    "fallbackRetryIntervalMs": 200,
+    "balanceCooldownMs": 60000,
+    "authCooldownMs": 60000
+  },
+  "taskLog": { "enabled": true, "dir": "logs-test", "file": "tasks.jsonl", "ringMax": 100 },
+  "channels": [
+    { "name": "explicit-pref", "protocol": "openai", "baseUrl": "http://127.0.0.1:9124", "apiKey": "k", "models": ["tier-model"], "priority": 1, "tier": "preferred" },
+    { "name": "sn-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9124", "apiKey": "k", "models": ["tier-model"], "priority": 10, "tier": "preferred" },
+    { "name": "sn-2", "protocol": "openai", "baseUrl": "http://127.0.0.1:9124", "apiKey": "k", "models": ["tier-model"], "priority": 20, "tier": "preferred" },
+    { "name": "bai-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9124", "apiKey": "k", "models": ["tier-model"], "priority": 30, "tier": "preferred" },
+
+    { "name": "bal-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9120", "apiKey": "k", "models": ["balance-model"], "priority": 10 },
+    { "name": "auth-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9130", "apiKey": "k", "models": ["auth-model"], "priority": 10 },
+    { "name": "empty-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9131", "apiKey": "k", "models": ["empty-model"], "priority": 10 },
+
+    { "name": "ok-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9101", "apiKey": "k", "models": ["balance-model", "auth-model", "empty-model", "think-model"], "priority": 99 },
+
+    { "name": "think-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9132", "apiKey": "k", "models": ["think-model"], "priority": 5 },
+    { "name": "plain-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9132", "apiKey": "k", "models": ["plain-model"], "priority": 5 }
+  ]
+}

@@ -1,0 +1,977 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>本地模型网关 · 状态面板</title>
+<style>
+  :root {
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --line: #e4e7ec;
+    --text: #1a1d21;
+    --muted: #6b7280;
+    --ok: #16a34a;
+    --ok-bg: #e8f7ee;
+    --warn: #d97706;
+    --warn-bg: #fdf3e3;
+    --bad: #dc2626;
+    --bad-bg: #fdecec;
+    --idle: #6b7280;
+    --idle-bg: #eef0f3;
+    --accent: #2563eb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 28px; background: var(--bg); color: var(--text);
+    font: 14px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; }
+  header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 22px; }
+  h1 { font-size: 20px; margin: 0; font-weight: 650; letter-spacing: -0.2px; }
+  .sub { color: var(--muted); font-size: 13px; }
+  .sub code {
+    background: #fff; border: 1px solid var(--line); border-radius: 5px;
+    padding: 1px 6px; font-size: 12px;
+  }
+  .actions { margin-left: auto; display: flex; gap: 8px; }
+  button {
+    border: 1px solid var(--line); background: #fff; color: var(--text);
+    border-radius: 7px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+  }
+  button:hover { border-color: #c9ced6; background: #fafbfc; }
+  button:active { transform: translateY(1px); }
+
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 20px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .stat .k { color: var(--muted); font-size: 12px; letter-spacing: .3px; }
+  .stat .v { font-size: 24px; font-weight: 650; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  /* 费用行：金额一律短格式（6/4/2 位），保证不撑破 170px 的卡片 */
+  .stat .ucost { margin-top: 3px; font-variant-numeric: tabular-nums; }
+
+  h2 { font-size: 14px; font-weight: 620; margin: 26px 0 12px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); gap: 12px; }
+  .ch { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+  .ch.disabled { opacity: .55; }
+  .ch-top { display: flex; align-items: center; gap: 8px; }
+  .ch-name { font-weight: 620; font-size: 15px; }
+  .badge {
+    font-size: 11px; padding: 2px 8px; border-radius: 20px; font-weight: 600;
+    white-space: nowrap;
+  }
+  .b-ok { background: var(--ok-bg); color: var(--ok); }
+  .b-warn { background: var(--warn-bg); color: var(--warn); }
+  .b-bad { background: var(--bad-bg); color: var(--bad); }
+  .b-idle { background: var(--idle-bg); color: var(--idle); }
+  .proto { margin-left: auto; font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 1px 7px; border-radius: 5px; }
+  .ch-url { color: var(--muted); font-size: 12px; margin-top: 4px; word-break: break-all; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .ch-metrics { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+  .ch-metrics b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
+  .ch-err {
+    margin-top: 9px; font-size: 12px; color: var(--bad); background: var(--bad-bg);
+    border-radius: 6px; padding: 6px 9px; word-break: break-word;
+    font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  .ch-desc { margin-top: 7px; font-size: 12px; color: var(--muted); }
+
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+  summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+  .model-list { margin-top: 12px; display: flex; flex-wrap: wrap; gap: 6px; max-height: 320px; overflow: auto; }
+  .model-list span {
+    font-size: 12px; background: #f2f4f7; border: 1px solid var(--line);
+    border-radius: 5px; padding: 2px 8px; font-family: ui-monospace, Menlo, Consolas, monospace;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+  #pool { display: flex; flex-direction: column; gap: 8px; }
+  .pool-row { display: flex; align-items: center; gap: 12px; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 8px 14px; }
+  .pool-model { font-weight: 600; font-size: 13px; min-width: 180px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .pool-chs { font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 1px 7px; border-radius: 5px; flex-shrink: 0; }
+  .pool-list { display: flex; flex-wrap: wrap; gap: 6px; }
+  .pool-ch { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; background: #f2f4f7; border: 1px solid var(--line); border-radius: 5px; padding: 2px 9px; }
+  .pool-ch em { font-style: normal; font-size: 11px; color: var(--muted); }
+  .hint { font-size: 12px; font-weight: 400; color: var(--muted); }
+  .effort-tag { font-size: 11px; padding: 1px 7px; border-radius: 20px; background: #eef2ff; color: #4f46e5; font-weight: 600; white-space: nowrap; }
+  .ch-del { margin-left: auto; border: none; background: none; color: var(--muted); font-size: 15px; padding: 0 4px; cursor: pointer; line-height: 1; }
+  .ch-del:hover { color: var(--bad); background: none; }
+  .modal-mask { position: fixed; inset: 0; background: rgba(15,18,22,.45); display: flex; align-items: center; justify-content: center; z-index: 50; }
+  .modal { background: #fff; border-radius: 14px; padding: 22px 24px; width: 440px; max-width: calc(100vw - 40px); max-height: 90vh; overflow: auto; box-shadow: 0 20px 50px rgba(0,0,0,.18); }
+  .modal h3 { margin: 0 0 16px; font-size: 16px; }
+  .form { display: flex; flex-direction: column; gap: 11px; }
+  .form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+  .form input, .form select {
+    border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px; font-size: 13px; color: var(--text);
+    font-family: inherit;
+  }
+  .form input:focus, .form select:focus { outline: none; border-color: var(--accent); }
+  .modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
+  .modal-actions button { margin-left: auto; }
+  .modal-actions button + button { margin-left: 0; }
+  .form-err { color: var(--bad); font-size: 12px; flex: 1; }
+  /* P3：模型级健康度表 + 耗时分解条（纯 CSS，零外部资源） */
+  .mh { width: 100%; border-collapse: collapse; }
+  .mh th, .mh td { text-align: left; padding: 6px 10px; border-top: 1px solid var(--line); font-size: 12px; }
+  .mh th { border-top: none; color: var(--muted); font-weight: 600; }
+  .mh td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .mh td.mono { font-family: ui-monospace, Menlo, Consolas, monospace; }
+  .rate { display: inline-flex; align-items: center; gap: 6px; }
+  .rate .meter { width: 52px; height: 6px; border-radius: 3px; background: var(--idle-bg); overflow: hidden; display: inline-block; }
+  .rate .meter i { display: block; height: 100%; }
+  .bar { display: flex; height: 16px; border-radius: 8px; overflow: hidden; background: var(--idle-bg); margin: 10px 0 8px; }
+  .bar i { display: block; height: 100%; min-width: 2px; }
+  .seg-queue { background: var(--warn); }
+  .seg-ttfb { background: var(--accent); }
+  .seg-body { background: var(--ok); }
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend b { color: var(--text); font-variant-numeric: tabular-nums; font-weight: 600; }
+  .swatch { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+  /* Token 用量柱状图：一行一个模型，行内每个范围一条横向堆叠柱（输入 + 输出） */
+  .uchart { margin-top: 10px; display: grid; gap: 5px; }
+  .uchart .urow { display: grid; grid-template-columns: 190px repeat(4, minmax(0, 1fr)); gap: 12px; align-items: center; }
+  .uchart .uhead { color: var(--muted); font-size: 12px; font-weight: 600; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+  .uchart .uname { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .uplot { display: flex; align-items: center; gap: 6px; min-width: 0; flex-wrap: wrap; row-gap: 2px; }
+  .utrack { flex: 1 1 auto; min-width: 20px; height: 14px; border-radius: 4px; background: var(--idle-bg); overflow: hidden; display: flex; }
+  .utrack i { display: block; height: 100%; min-width: 2px; }
+  .u-in { background: var(--accent); }
+  .u-out { background: var(--ok); }
+  /* 每个范围的 token 与金额分两行右对齐；金额行字号更小，窄列时整体换行（flex-wrap）不挤压柱体 */
+  .uval { flex: 0 0 78px; text-align: right; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; display: flex; flex-direction: column; align-items: flex-end; gap: 1px; }
+  .uval .ucost { font-size: 11px; opacity: .85; }
+  footer { margin-top: 26px; color: var(--muted); font-size: 12px; text-align: center; }
+  .keybar { margin-bottom: 16px; display: none; gap: 8px; }
+  .keybar input { flex: 1; border: 1px solid var(--line); border-radius: 7px; padding: 6px 10px; font-size: 13px; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    background: #1a1d21; color: #fff; padding: 9px 16px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>本地模型聚合网关</h1>
+    <div class="sub">
+      <code id="baseurl">http://127.0.0.1:8787/v1</code>
+      · api_key <code id="apikey">-</code>
+    </div>
+    <div class="actions">
+      <button id="btn-add" style="background:var(--accent);border-color:var(--accent);color:#fff">＋ 添加供应商</button>
+      <button id="btn-add-wb" title="WorkBuddy 国际版账号：设备码授权自动落号或手动粘贴 access_token">＋ WorkBuddy 国际版</button>
+      <button id="btn-discover-save" title="拉取各渠道模型列表并写回 config.json">拉取并保存</button>
+      <button id="btn-discover" title="只刷新内存里的模型列表，不改配置">拉取模型</button>
+      <button id="btn-probe">探活</button>
+      <button id="btn-reload">重载配置</button>
+      <button id="btn-refresh">刷新</button>
+    </div>
+  </header>
+
+  <div class="keybar" id="keybar">
+    <input id="key-input" placeholder="面板需要 API Key（与对外调用同一个）" />
+    <button id="key-save">保存</button>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="k">渠道总数</div><div class="v" id="s-total">-</div></div>
+    <div class="stat"><div class="k">健康渠道</div><div class="v" id="s-healthy">-</div></div>
+    <div class="stat"><div class="k">聚合模型</div><div class="v" id="s-models">-</div></div>
+    <div class="stat"><div class="k">总请求 / 失败</div><div class="v" id="s-req">-</div></div>
+  </div>
+
+  <h2>渠道</h2>
+  <div class="grid" id="channels"></div>
+
+  <h2>模型池 <span class="hint">同一个模型名下的所有候选渠道，按优先级排序；请求时自动挑第一个健康的</span></h2>
+  <div id="pool"></div>
+
+  <h2>可用模型</h2>
+  <details>
+    <summary>展开模型列表</summary>
+    <div class="model-list" id="models"></div>
+  </details>
+
+  <h2>任务日志 <span class="hint">每个请求一条：两段选路过程、每次尝试的错误指纹都记在这里（logs/tasks.jsonl）</span></h2>
+  <div class="stats">
+    <div class="stat"><div class="k">任务数</div><div class="v" id="t-tasks">-</div></div>
+    <div class="stat"><div class="k">整体失败</div><div class="v" id="t-failed">-</div></div>
+    <div class="stat"><div class="k">尝试级错误</div><div class="v" id="t-fa">-</div></div>
+    <div class="stat"><div class="k">落盘</div><div class="v" id="t-file" style="font-size:12px">-</div></div>
+  </div>
+  <div id="t-fps" style="margin-bottom:10px"></div>
+  <div class="grid" id="tasks" style="max-height:320px;overflow:auto"></div>
+
+  <h2>Token 用量 <span class="hint">只统计上游真实回报 usage 的成功请求（失败 / 中止 / 无 usage 的请求不计，不估算）；今日 = 自然日，其余为滚动 24h×N</span></h2>
+  <div class="stats" id="usage-cards"></div>
+  <div class="ch" id="usage-chart" style="margin-top:12px"></div>
+
+  <h2>每模型健康度 <span class="hint">按模型聚合：请求数 / 成功率 / 首字节 p50·p95（数据源：任务日志内存环）</span></h2>
+  <div class="ch" id="model-health"></div>
+
+  <h2>最近一次请求的耗时分解 <span class="hint">排队 → 首字节 → 正文 三段堆叠；下方是限流器的全局排队等待汇总</span></h2>
+  <div class="ch">
+    <div id="timing"></div>
+    <div id="queue-wait" style="margin-top:10px"></div>
+  </div>
+
+  <footer>每 5 秒自动刷新 · 网关零依赖，改完 config.json 会自动热重载</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div class="modal-mask" id="add-modal" style="display:none">
+  <div class="modal">
+    <h3>添加供应商</h3>
+    <div class="form">
+      <label>预设 <select id="f-preset"><option value="">自定义（手填 baseUrl）</option></select></label>
+      <label id="f-protocol-row" style="display:none">协议 <select id="f-protocol">
+        <option value="openai">OpenAI 兼容（DeepSeek/硅基流动/智谱/中转站等，绝大多数）</option>
+        <option value="anthropic">Anthropic 原生（Anthropic 官方或 Claude 原生中转）</option>
+      </select></label>
+      <label>渠道名 * <input id="f-name" placeholder="唯一标识，如 deepseek-a" /></label>
+      <label>API Key <input id="f-key" placeholder="sk-...（留空则先停用）" /></label>
+      <div id="wb-auth-row" style="display:none;border:1px dashed var(--border);padding:10px;border-radius:8px">
+        <div style="margin-bottom:8px"><b>WorkBuddy 国际版授权</b> <span class="hint">推荐：自动获取 access_token 并落号</span></div>
+        <button type="button" id="wb-start" style="background:var(--accent);border-color:var(--accent);color:#fff">开始授权 / 获取 Access Token</button>
+        <div id="wb-auth-info" class="hint" style="margin-top:8px;word-break:break-all"></div>
+      </div>
+      <label id="f-refresh-row" style="display:none">Refresh Token <input id="f-refresh" placeholder="可选（设备码授权自动回填；留空则不做自动续期）" /></label>
+      <label id="f-userid-row" style="display:none">User ID <input id="f-userid" placeholder="可选（余额接口的 X-User-Id，授权自动回填）" /></label>
+      <label>baseUrl <input id="f-baseurl" placeholder="https://api.example.com/v1（选预设后自动填）" /></label>
+      <label>模型 <input id="f-model" placeholder="绑定的单个模型，如 deepseek-chat" /></label>
+      <label>思考强度 <select id="f-effort">
+        <option value="">不限制（任何强度请求都可用）</option>
+        <option value="low">low</option>
+        <option value="medium">medium</option>
+        <option value="high">high</option>
+      </select></label>
+      <label>最高思考档位 <select id="f-maxeffort">
+        <option value="">跟随全局（routing.maxEffort，默认 high）</option>
+        <option value="high">high（最稳，正文不易被思考吃光）</option>
+        <option value="xhigh">xhigh（实测最高档，仅给支持的渠道开）</option>
+        <option value="medium">medium</option>
+        <option value="low">low</option>
+      </select></label>
+      <label>优先级 <input id="f-priority" type="number" value="100" /></label>
+      <label>备注 <input id="f-desc" placeholder="可选" /></label>
+    </div>
+    <div class="modal-actions">
+      <span class="form-err" id="f-err"></span>
+      <button id="f-cancel">取消</button>
+      <button id="f-submit" style="background:var(--accent);border-color:var(--accent);color:#fff">添加</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-mask" id="wb-modal" style="display:none">
+  <div class="modal">
+    <h3>批量导入 WorkBuddy 国际版账号</h3>
+    <div class="form">
+      <label>Access Token（每行一个，可一次贴很多个）
+        <textarea id="wb-batch-tokens" rows="8" placeholder="token1&#10;token2&#10;token3" style="font-family:monospace;resize:vertical"></textarea>
+      </label>
+      <label>绑定模型 <input id="wb-batch-model" value="deepseek-v4.1-flash" placeholder="所有账号绑定同一个模型进池子" /></label>
+      <label>优先级 <input id="wb-batch-priority" type="number" value="60" /></label>
+    </div>
+    <div class="modal-actions">
+      <span class="form-err" id="wb-batch-err"></span>
+      <button id="wb-batch-cancel">取消</button>
+      <button id="wb-batch-submit" style="background:var(--accent);border-color:var(--accent);color:#fff">批量添加</button>
+    </div>
+    <div class="hint" style="padding:0 24px 16px">
+      每行一个 access token → 自动生成 <code>wb-intl-1</code>、<code>wb-intl-2</code>… 渠道，全部绑定同一模型进池子；
+      同模型多账号 = 备用池，挂了自动换下一个。token 到期需手动替换（本页删旧加新）。
+      <details style="margin-top:8px">
+        <summary>单账号设备码授权（备选）</summary>
+        <button type="button" id="wb-open-device" style="margin-top:8px">打开单账号授权（开网页登录自动落号）</button>
+      </details>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let KEY = localStorage.getItem('gw_key') || '';
+
+function toast(msg) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+async function api(path, options = {}) {
+  const res = await fetch(path, {
+    ...options,
+    headers: { ...(options.headers || {}), ...(KEY ? { Authorization: 'Bearer ' + KEY } : {}) },
+  });
+  if (res.status === 401) {
+    $('keybar').style.display = 'flex';
+    throw new Error('需要 API Key');
+  }
+  let data = null;
+  try { data = await res.json(); } catch { data = null; }
+  // 非 2xx 一律按失败处理：否则 400 {ok:false} 也会被当成成功，界面照样弹"已重载/已添加"（Bug 2）
+  if (!res.ok) {
+    const msg = data?.error?.message || (typeof data?.error === 'string' ? data.error : data?.message);
+    throw new Error(msg || `HTTP ${res.status} ${res.statusText || ''}`.trim());
+  }
+  return data;
+}
+
+function stateBadge(c) {
+  if (!c.enabled) return ['b-idle', '已停用'];
+  if (c.coolingDown) return ['b-warn', `熔断 ${Math.ceil(c.coolRemainMs / 1000)}s`];
+  if (c.lastError && !c.lastOkAt) return ['b-bad', '不可用'];
+  return ['b-ok', '健康'];
+}
+
+function render(data) {
+  const chs = data.channels || [];
+  $('s-total').textContent = chs.length;
+  $('s-healthy').textContent = chs.filter((c) => c.enabled && c.healthy).length;
+  $('s-models').textContent = (data.models || []).length;
+  const total = chs.reduce((a, c) => a + (c.total || 0), 0);
+  const failed = chs.reduce((a, c) => a + (c.failed || 0), 0);
+  $('s-req').textContent = `${total} / ${failed}`;
+
+  $('channels').innerHTML = chs.map((c) => {
+    const [cls, label] = stateBadge(c);
+    const metrics = [
+      c.total ? `成功率 <b>${c.successRate}%</b>` : null,
+      c.latency ? `均延迟 <b>${c.latency}ms</b>` : null,
+      `模型 <b>${c.modelCount}</b>`,
+      `优先级 <b>${c.priority}</b>`,
+      c.preset ? `preset <b>${escapeHtml(c.preset)}</b>` : null,
+    ].filter(Boolean).join(' · ');
+    return `
+      <div class="ch ${c.enabled ? '' : 'disabled'}">
+        <div class="ch-top">
+          <span class="dot" style="background:var(--${c.enabled ? (c.coolingDown ? 'warn' : c.lastError && !c.lastOkAt ? 'bad' : 'ok') : 'idle'})"></span>
+          <span class="ch-name">${escapeHtml(c.name)}</span>
+          ${c.effort ? `<span class="effort-tag" title="思考强度标签：请求带对应 reasoning_effort 时优先路由到这里">${escapeHtml(c.effort)}</span>` : ''}
+          <span class="badge ${cls}">${label}</span>
+          ${c.creditRemain != null ? `<span class="badge b-idle" title="账号剩余额度（每小时自动刷新）">余额 ${c.creditRemain}</span>` : ''}
+          <span class="proto">${escapeHtml(c.protocol)}</span>
+          <button class="ch-del" data-del="${escapeHtml(c.name)}" title="从 config.json 删除该渠道">×</button>
+        </div>
+        <div class="ch-url">${escapeHtml(c.baseUrl)}</div>
+        <div class="ch-metrics">${metrics}</div>
+        ${c.keyMissing ? '<div class="ch-desc">⚠ 未配置 apiKey，已自动停用</div>' : ''}
+        ${c.description ? `<div class="ch-desc">${escapeHtml(c.description)}</div>` : ''}
+        ${c.lastError ? `<div class="ch-err">${escapeHtml(c.lastError)}</div>` : ''}
+      </div>`;
+  }).join('') || '<div class="ch">暂无渠道，点击右上角「添加供应商」或在 config.json 里配置</div>';
+
+  $('models').innerHTML = (data.models || []).map((m) => `<span>${escapeHtml(m)}</span>`).join('')
+    || '<span>（暂无，填好 apiKey 后启动会自动发现）</span>';
+
+  const pool = data.pool || [];
+  $('pool').innerHTML = pool.map((p) => `
+    <div class="pool-row">
+      <span class="pool-model">${escapeHtml(p.model)}</span>
+      <span class="pool-chs">${p.channels.length} 渠道</span>
+      <span class="pool-list">${p.channels.map((c) => {
+        const dot = c.healthy ? 'ok' : c.coolingDown ? 'warn' : 'bad';
+        const extra = c.coolingDown ? ` 熔断${Math.ceil(c.coolRemainMs / 1000)}s` : c.singleModel ? ' · 单模型' : '';
+        const eff = c.effort ? `<span class="effort-tag">${escapeHtml(c.effort)}</span>` : '';
+        return `<span class="pool-ch" title="${escapeHtml(c.name)}"><span class="dot" style="background:var(--${dot})"></span>${escapeHtml(c.name)}<em>p${c.priority}${extra}</em>${eff}</span>`;
+      }).join('')}</span>
+    </div>`).join('') || '<div class="ch">池子为空，添加供应商后会在这里聚合</div>';
+}
+
+function escapeHtml(s) {
+  return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+async function refresh() {
+  try {
+    const data = await api('/api/status');
+    $('keybar').style.display = 'none';
+    // 服务端只回掩码（完整 apiKey 不再下发），面板仅作"配了哪个 key"的提示
+    if (data.server?.apiKeyMasked) $('apikey').textContent = data.server.apiKeyMasked;
+    render(data);
+    loadTasks();
+    loadMetrics();
+    loadUsage();
+  } catch (e) {
+    if (e.message !== '需要 API Key') toast('刷新失败: ' + e.message);
+  }
+}
+
+// ---- 任务日志 ----
+async function loadTasks() {
+  let t;
+  try { t = await api('/api/tasks?limit=15'); } catch { return; }
+  const s = t.stats || {};
+  $('t-tasks').textContent = s.tasks ?? '-';
+  $('t-failed').textContent = s.failed ?? '-';
+  $('t-fa').textContent = s.failedAttempts ?? '-';
+  $('t-file').textContent = t.file ? t.file.split(/[\\/]/).slice(-2).join('/') : '仅内存';
+  const fps = Object.entries(s.byFingerprint || {}).sort((a, b) => b[1] - a[1]).slice(0, 8);
+  $('t-fps').innerHTML = fps.length
+    ? fps.map(([k, v]) => `<span class="badge b-bad" style="margin-right:6px">${escapeHtml(k)} × ${v}</span>`).join('')
+    : '<span class="hint">暂无错误记录</span>';
+  const recs = (t.recent || []).slice(0, 15);
+  $('tasks').innerHTML = recs.map((r) => {
+    const errs = (r.attempts || []).filter((a) => a.error);
+    const chain = [
+      ...new Set((r.attempts || []).map((a) => `${a.channel}${a.error ? '✗' : ''}`)),
+    ].join(' → ') || (r.channel || '-');
+    const last = errs.length ? errs[errs.length - 1] : null;
+    const cls = r.ok ? 'b-ok' : 'b-bad';
+    const label = r.ok ? '成功' : '失败';
+    return `
+    <div class="ch">
+      <div class="ch-top">
+        <b>${escapeHtml(r.model || '-')}</b>
+        <span class="badge ${cls}">${label}</span>
+        ${r.tier ? `<span class="badge b-idle">${escapeHtml(r.tier)}</span>` : ''}
+      </div>
+      <div class="ch-metrics">${escapeHtml(chain)} · ${r.tries ?? '-'} 次尝试${r.rounds > 1 ? ` · ${r.rounds} 轮` : ''} · ${r.elapsedMs ?? '-'}ms</div>
+      ${last ? `<div class="ch-err">${escapeHtml(last.fingerprint || last.kind || 'error')}: ${escapeHtml((last.error || '').slice(0, 140))}</div>` : ''}
+      ${!r.ok && r.error ? `<div class="ch-err">${escapeHtml(String(r.error).slice(0, 140))}</div>` : ''}
+      <div class="ch-metrics" style="color:var(--muted)">${escapeHtml((r.ts || '').slice(11, 19))}${r.agent ? ' · ' + escapeHtml(r.agent) : ''}</div>
+    </div>`;
+  }).join('') || '<div class="ch">还没有请求经过网关</div>';
+  renderTiming(recs[0]);
+}
+
+// ---- P3：模型级健康度 + 最近一次请求的耗时分解 ----
+// 一律用 createElement / textContent 渲染：模型名与错误指纹都来自上游数据，
+// 绝不拼 innerHTML（面板不引入 XSS 面）。零外部依赖，离线可用。
+function el(tag, cls, text) {
+  const n = document.createElement(tag);
+  if (cls) n.className = cls;
+  if (text != null) n.textContent = String(text);
+  return n;
+}
+function msText(v) { return typeof v === 'number' && Number.isFinite(v) ? `${v}ms` : '未采集'; }
+
+function renderModelHealth(models) {
+  const host = $('model-health');
+  host.textContent = '';
+  const list = Array.isArray(models) ? models : [];
+  if (!list.length) { host.appendChild(el('div', 'hint', '还没有请求经过网关')); return; }
+  const table = el('table', 'mh');
+  const hrow = el('tr');
+  for (const h of ['模型', '请求', '成功率', '首字节 p50', '首字节 p95', '主要失败指纹']) hrow.appendChild(el('th', null, h));
+  const thead = el('thead');
+  thead.appendChild(hrow);
+  table.appendChild(thead);
+  const tbody = el('tbody');
+  for (const m of list) {
+    const tr = el('tr');
+    tr.appendChild(el('td', 'mono', m.model));
+    tr.appendChild(el('td', 'num', m.requests ?? '-'));
+    const rate = el('td', 'rate num');
+    if (typeof m.successRate === 'number') {
+      const pct = Math.round(m.successRate * 1000) / 10;
+      const meter = el('span', 'meter');
+      const fill = el('i');
+      fill.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+      fill.style.background = pct >= 99 ? 'var(--ok)' : pct >= 80 ? 'var(--warn)' : 'var(--bad)';
+      meter.appendChild(fill);
+      // 右对齐：先放百分比再放进度条，视觉上与数值列对齐
+      rate.appendChild(el('span', null, `${pct}%`));
+      rate.appendChild(meter);
+    } else {
+      rate.appendChild(el('span', null, '-'));
+    }
+    tr.appendChild(rate);
+    tr.appendChild(el('td', 'num', msText(m.ttfb?.p50)));
+    tr.appendChild(el('td', 'num', msText(m.ttfb?.p95)));
+    const top = (m.failures || [])[0];
+    const rec = (m.recovered || [])[0];
+    tr.appendChild(el('td', 'mono', top
+      ? `${top.fingerprint} × ${top.count}`
+      : (rec ? `已换家救回 ${rec.fingerprint} × ${rec.count}` : '—')));
+    tbody.appendChild(tr);
+  }
+  table.appendChild(tbody);
+  host.appendChild(table);
+}
+
+// 三段耗时：与 lib/tasklog.mjs 的 TIMING_KEYS 一一对应
+const TIMING_SEGS = [
+  ['queueMs', '排队', 'seg-queue', 'var(--warn)'],
+  ['ttfbMs', '首字节', 'seg-ttfb', 'var(--accent)'],
+  ['bodyMs', '正文', 'seg-body', 'var(--ok)'],
+];
+
+function renderTiming(rec) {
+  const host = $('timing');
+  host.textContent = '';
+  if (!rec) { host.appendChild(el('div', 'hint', '还没有请求经过网关')); return; }
+  // 取最后一次尝试上的三段（转发层实测处）；没有 attempts 时退回请求级字段
+  const attempts = Array.isArray(rec.attempts) ? rec.attempts : [];
+  const src = attempts.length ? attempts[attempts.length - 1] : rec;
+  const segs = TIMING_SEGS.map(([key, label, cls, color]) => ({
+    key, label, cls, color, v: typeof src[key] === 'number' ? src[key] : null,
+  }));
+  const sum = segs.reduce((s, x) => s + (x.v || 0), 0);
+
+  const head = el('div', 'ch-metrics');
+  head.appendChild(el('b', null, rec.model || '-'));
+  head.appendChild(document.createTextNode(
+    ` · ${rec.ok === false ? '失败' : '成功'} · 总耗时 ${rec.elapsedMs ?? '-'}ms`
+    + `${rec.channel ? ' · ' + rec.channel : ''}${rec.ts ? ' · ' + rec.ts.slice(11, 19) : ''}`,
+  ));
+  host.appendChild(head);
+
+  if (!sum) {
+    host.appendChild(el('div', 'hint', '这一条没有分段耗时（queueMs / ttfbMs / bodyMs 未采集）'));
+    return;
+  }
+  const bar = el('div', 'bar');
+  for (const s of segs) {
+    if (s.v == null) continue;
+    const seg = el('i', s.cls);
+    seg.style.width = `${(s.v / sum) * 100}%`;
+    seg.title = `${s.label} ${s.v}ms`;
+    bar.appendChild(seg);
+  }
+  host.appendChild(bar);
+  const legend = el('div', 'legend');
+  for (const s of segs) {
+    const item = el('span');
+    const sw = el('span', 'swatch');
+    sw.style.background = s.color;
+    item.appendChild(sw);
+    item.appendChild(el('b', null, `${s.label} ${s.v == null ? '未采集' : s.v + 'ms'}`));
+    legend.appendChild(item);
+  }
+  host.appendChild(legend);
+}
+
+async function loadMetrics() {
+  try {
+    const m = await api('/api/metrics');
+    renderModelHealth(m.models);
+    renderQueueWait(m.queueWait);
+  } catch { /* 指标不可用时其余面板照常工作 */ }
+}
+
+// ---- Token 用量（/api/usage）----
+// 五个时间段卡片 + 一张按模型柱状图。记账口径见 lib/usage.mjs：只统计上游真实回报 usage 的
+// 成功请求，不估算、不造假 0。因此 requests 为 0 表示"这个范围还没有采到任何用量"，
+// 一律显示「未采集」——0 是"真的没有用量"这个有意义的值，不能被"没采到"占用。
+// 全程 createElement / textContent：模型名来自客户端与上游，绝不拼 innerHTML。
+const USAGE_RANGES = [
+  ['today', '今日'],
+  ['d1', '近 1 天'],
+  ['d7', '近 7 天'],
+  ['d30', '近 30 天'],
+  ['d90', '近 90 天'],
+];
+// 柱状图固定这四列（与设计文档 §4.4 一致）
+const USAGE_BAR_RANGES = [['today', '今日'], ['d7', '近 7 天'], ['d30', '近 30 天'], ['d90', '近 90 天']];
+const USAGE_MISSING = '未采集';
+
+/** 取一个有限的 token 数字；没采到 -> null（调用方按「未采集」渲染，绝不兜底成 0） */
+function usageNum(v) {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null;
+}
+
+/** 紧凑数字：1.2k / 3.4M（柱右标注用；完整数值放 title，不丢精度） */
+function usageCompact(n) {
+  if (n == null) return USAGE_MISSING;
+  if (n < 1000) return String(n);
+  if (n < 1e6) return `${(n / 1000).toFixed(n < 1e4 ? 1 : 0)}k`;
+  return `${(n / 1e6).toFixed(1)}M`;
+}
+
+// ---- 金额（/api/usage §4 的 cost / costComplete / unpriced*）----
+// 币种符号只认响应顶层 pricing（symbol 优先、退化为 currency 代码）：面板不硬编码任何币种，
+// 也不做汇率换算。金额缺失 -> 「未采集」，有钱没价 -> 「未配置价格」，绝不把未配价的模型当 0 计。
+
+/** 币种前缀；响应没给就留空（宁可不显示币种，也不猜一个硬编码符号） */
+function usageSymbol(pricing) {
+  const p = pricing && typeof pricing === 'object' ? pricing : {};
+  if (typeof p.symbol === 'string' && p.symbol) return p.symbol;
+  if (typeof p.currency === 'string' && p.currency) return `${p.currency} `;
+  return '';
+}
+
+/** 金额短格式：<0.01 保留 6 位（如 0.000061）、<1 保留 4 位、其余 2 位，并去掉尾随 0 */
+function usageMoney(n) {
+  if (typeof n !== 'number' || !Number.isFinite(n)) return USAGE_MISSING;
+  const abs = Math.abs(n);
+  let s = n.toFixed(abs < 0.01 ? 6 : abs < 1 ? 4 : 2);
+  if (s.includes('.')) s = s.replace(/0+$/, '').replace(/\.$/, '');
+  // 后端已四舍五入到 6 位；这里再兜一层，别把真的非 0 金额显示成 0
+  if (n !== 0 && Number.parseFloat(s) === 0) return '<0.000001';
+  return s;
+}
+
+/** 一个 cost 字段的短文案：数字 -> symbol+金额；null -> 未配置价格；缺字段 -> 未采集 */
+function usageMoneyText(cost, sym) {
+  if (typeof cost === 'number' && Number.isFinite(cost)) return `${sym}${usageMoney(cost)}`;
+  if (cost === null) return '未配置价格';
+  return USAGE_MISSING;
+}
+
+/** 部分计价时的 title：写明未计价模型数与未计入的 token（unpriced 后端已截断到 20 个） */
+function usagePartialTitle(r) {
+  const names = Array.isArray(r?.unpriced) ? r.unpriced.filter((x) => typeof x === 'string' && x) : [];
+  const tokens = usageNum(r?.unpricedTokens);
+  const head = names.length ? `${names.length} 个模型未配置价格` : '有模型未配置价格';
+  const body = tokens == null ? '' : `，共 ${tokens} tokens 未计入费用`;
+  const list = names.length ? `（${names.slice(0, 5).join('、')}${names.length > 5 ? ' 等' : ''}）` : '';
+  return `部分计价：${head}${body}${list}`;
+}
+
+/** 时间卡片费用行：无记录 -> 未采集；有记录按 cost 字段出金额。
+ *  「（部分）」只在**真的算进去了钱**（cost 是数字）且 costComplete=false 时追加：
+ *  cost=null + costComplete=false 是"有记录但全部模型都没配价格"（§4.1 场景 4），一分钱都没算，
+ *  说「部分」会误导成"算进去一部分"。两种情况的 title 都照旧写明未计价模型数与 token 数。 */
+function usageCostLine(r, has, sym) {
+  if (!has) return { text: `费用 ${USAGE_MISSING}`, title: '' };
+  const partial = r?.costComplete === false;
+  const priced = typeof r?.cost === 'number' && Number.isFinite(r.cost);
+  return {
+    text: `费用 ${usageMoneyText(r?.cost, sym)}${priced && partial ? '（部分）' : ''}`,
+    title: partial ? usagePartialTitle(r) : '',
+  };
+}
+
+function renderUsage(data) {
+  const host = $('usage-cards');
+  host.textContent = '';
+  const u = data && typeof data === 'object' ? data : {};
+  const sym = usageSymbol(u.pricing);
+  for (const [key, label] of USAGE_RANGES) {
+    const r = u[key];
+    const has = typeof r?.requests === 'number' && r.requests > 0;
+    const card = el('div', 'stat');
+    card.appendChild(el('div', 'k', label));
+    const big = el('div', 'v', has ? usageNum(r.totalTokens) ?? USAGE_MISSING : USAGE_MISSING);
+    if (!has) big.style.fontSize = '15px';
+    card.appendChild(big);
+    const sub = el('div', 'k');
+    sub.appendChild(el('span', null, `输入 ${has ? usageNum(r.inputTokens) ?? USAGE_MISSING : USAGE_MISSING}`));
+    sub.appendChild(el('span', null, ` · 输出 ${has ? usageNum(r.outputTokens) ?? USAGE_MISSING : USAGE_MISSING}`));
+    sub.appendChild(el('span', null, ` · 请求 ${has ? r.requests : USAGE_MISSING}`));
+    card.appendChild(sub);
+    const cost = usageCostLine(r, has, sym);
+    const costLine = el('div', 'k ucost', cost.text);
+    if (cost.title) costLine.title = cost.title;
+    card.appendChild(costLine);
+    host.appendChild(card);
+  }
+  renderUsageChart(u);
+}
+
+// 柱状图：一行一个模型，行内四个范围各一条横向堆叠柱（输入 + 输出）。
+// 所有柱共用同一基准（全表最大总量），所以柱长可以直接横向比较；
+// 某范围没有记录 -> 只画空轨道 +「未采集」，绝不画 0 长柱冒充"真的用了 0"。
+function renderUsageChart(u) {
+  const host = $('usage-chart');
+  host.textContent = '';
+  const sym = usageSymbol(u?.pricing);
+  // 模型行 = 四个范围里出现过的模型的并集
+  const cells = new Map();
+  let max = 0;
+  for (const [key] of USAGE_BAR_RANGES) {
+    const byModel = u?.[key]?.byModel;
+    if (!byModel || typeof byModel !== 'object') continue;
+    for (const [model, v] of Object.entries(byModel)) {
+      const total = usageNum(v?.totalTokens);
+      if (total == null) continue;
+      if (!cells.has(model)) cells.set(model, {});
+      // cost 原样保留（number | null | 缺字段）：null=未配置价格、缺字段=未采集，绝不兜底成 0
+      cells.get(model)[key] = {
+        total, input: usageNum(v?.inputTokens), output: usageNum(v?.outputTokens), cost: v?.cost,
+      };
+      if (total > max) max = total;
+    }
+  }
+  if (!cells.size) {
+    host.appendChild(el('div', 'hint', `Token 用量：${USAGE_MISSING}（只统计上游真实回报 usage 的成功请求）`));
+    return;
+  }
+  // 用量大的排前面（按近 90 天合计），同量按模型名稳定排序
+  const rows = [...cells.entries()].sort((a, b) => (b[1].d90?.total ?? 0) - (a[1].d90?.total ?? 0) || a[0].localeCompare(b[0]));
+
+  const legend = el('div', 'legend');
+  for (const [cls, color, label] of [['u-in', 'var(--accent)', '输入'], ['u-out', 'var(--ok)', '输出']]) {
+    const item = el('span');
+    const sw = el('span', 'swatch');
+    sw.style.background = color;
+    item.appendChild(sw);
+    item.appendChild(el('b', null, label));
+    item.appendChild(el('span', null, cls === 'u-in' ? 'prompt_tokens' : 'completion_tokens'));
+    legend.appendChild(item);
+  }
+  host.appendChild(legend);
+
+  const chart = el('div', 'uchart');
+  const head = el('div', 'urow uhead');
+  head.appendChild(el('div', null, '模型'));
+  for (const [, label] of USAGE_BAR_RANGES) head.appendChild(el('div', null, label));
+  chart.appendChild(head);
+
+  for (const [model, row] of rows) {
+    const line = el('div', 'urow');
+    const name = el('div', 'uname', model);
+    name.title = model;
+    line.appendChild(name);
+    for (const [key, label] of USAGE_BAR_RANGES) {
+      const plot = el('div', 'uplot');
+      const cell = row[key];
+      plot.appendChild(el('div', 'utrack')); // 空轨道先占位，保证栅格对齐
+      if (!cell) {
+        plot.appendChild(el('span', 'uval', USAGE_MISSING));
+      } else {
+        const track = plot.children[0];
+        for (const [cls, part] of [['u-in', cell.input], ['u-out', cell.output]]) {
+          if (part == null || part <= 0 || !max) continue;
+          const seg = el('i', cls);
+          // 按比例给宽度；"最细也要看得见"由 CSS 的 min-width:2px 兜底
+          // （不能用百分比下限——轨道在窄屏变窄时，0.5% 会缩到 0.25px，等于没画）
+          seg.style.width = `${(part / max) * 100}%`;
+          seg.title = `${label} ${cls === 'u-in' ? '输入' : '输出'} ${part} tokens`;
+          track.appendChild(seg);
+        }
+        const val = el('span', 'uval');
+        const tok = el('span', null, usageCompact(cell.total));
+        const costTxt = usageMoneyText(cell.cost, sym);
+        const cost = el('span', 'ucost', costTxt);
+        val.appendChild(tok);
+        val.appendChild(cost);
+        val.title = `${model} · ${label}：共 ${cell.total} tokens（输入 ${cell.input ?? USAGE_MISSING} / 输出 ${cell.output ?? USAGE_MISSING}）`
+          + ` · 费用 ${costTxt}${cell.cost === null ? '（该模型未配置价格）' : ''}`;
+        plot.appendChild(val);
+      }
+      line.appendChild(plot);
+    }
+    chart.appendChild(line);
+  }
+  host.appendChild(chart);
+  host.appendChild(
+    el('div', 'hint', `柱长按全表最大用量（${usageCompact(max)} tokens）等比缩放；${USAGE_MISSING} = 该范围没有成功请求回报 usage。`
+      + '每格下方是该模型在该范围的费用：「未配置价格」= 这个模型没配单价（绝不当 0 计），「未采集」= 接口没给金额字段'),
+  );
+}
+
+async function loadUsage() {
+  try {
+    renderUsage(await api('/api/usage'));
+  } catch { /* 用量接口不可用时其余面板照常工作 */ }
+}
+
+// 限流器的全局排队等待汇总（P3 §3.2）：字段由 lib/concurrency.mjs 产出并原样透传，
+// 缺失时显示"未采集"——不把"没上报"显示成"不用排队"。
+function renderQueueWait(qw) {
+  const host = $('queue-wait');
+  host.textContent = '';
+  const has = qw && ['queueWaitMsTotal', 'queueWaitMsMax', 'waitedCount']
+    .some((k) => typeof qw[k] === 'number' && Number.isFinite(qw[k]));
+  if (!has) {
+    host.appendChild(el('div', 'hint', '全局排队等待：未采集（queueWaitMsTotal / queueWaitMsMax / waitedCount）'));
+    return;
+  }
+  const line = el('div', 'legend');
+  for (const [label, v, unit] of [
+    ['最大等待', qw.queueWaitMsMax, 'ms'],
+    ['累计等待', qw.queueWaitMsTotal, 'ms'],
+    ['排队次数', qw.waitedCount, ''],
+  ]) {
+    if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+    const item = el('span');
+    item.appendChild(el('b', null, `${label} ${v}${unit}`));
+    line.appendChild(item);
+  }
+  host.appendChild(line);
+}
+
+$('btn-refresh').onclick = refresh;
+$('btn-discover').onclick = async () => {
+  try {
+    const r = await api('/api/discover', { method: 'POST' });
+    const bad = (r.results || []).filter((x) => !x.ok);
+    toast(bad.length ? `拉取完成，${bad.length} 个渠道失败` : `拉取完成，共 ${r.models} 个模型`);
+    refresh();
+  } catch (e) { toast('拉取失败: ' + e.message); }
+};
+$('btn-discover-save').onclick = async () => {
+  try {
+    const r = await api('/api/discover?save=1', { method: 'POST' });
+    toast(`已写回 ${r.saved?.changed ?? 0} 个渠道的模型白名单`);
+    refresh();
+  } catch (e) { toast('拉取失败: ' + e.message); }
+};
+$('btn-probe').onclick = async () => {
+  try { await api('/api/probe', { method: 'POST' }); toast('探活完成'); refresh(); }
+  catch (e) { toast('探活失败: ' + e.message); }
+};
+$('btn-reload').onclick = async () => {
+  try { await api('/api/reload', { method: 'POST' }); toast('配置已重载'); refresh(); }
+  catch (e) { toast('重载失败: ' + e.message); }
+};
+$('key-save').onclick = () => {
+  KEY = $('key-input').value.trim();
+  localStorage.setItem('gw_key', KEY);
+  refresh();
+};
+$('key-input').onkeydown = (e) => { if (e.key === 'Enter') $('key-save').click(); };
+
+// ---- 添加供应商 ----
+let PRESETS = [];
+function applyPresetFields() {
+  const p = PRESETS.find((x) => x.name === $('f-preset').value);
+  $('f-baseurl').value = p ? p.baseUrl : '';
+  // 自定义供应商：露出协议选择
+  $('f-protocol-row').style.display = p ? 'none' : 'flex';
+  const isWb = p && p.name === 'workbuddy-intl';
+  $('wb-auth-row').style.display = isWb ? 'block' : 'none';
+  $('f-refresh-row').style.display = isWb ? 'flex' : 'none';
+  $('f-userid-row').style.display = isWb ? 'flex' : 'none';
+  $('wb-auth-info').textContent = '';
+  $('f-model').placeholder = isWb ? '如 deepseek-v4.1-flash（默认）' : '绑定的单个模型，如 deepseek-chat';
+}
+async function openAddModal(presetName = '') {
+  $('add-modal').style.display = 'flex';
+  $('f-err').textContent = '';
+  if (!PRESETS.length) {
+    try {
+      const r = await api('/api/presets');
+      PRESETS = r.presets || [];
+      $('f-preset').innerHTML = '<option value="">自定义（手填 baseUrl）</option>'
+        + PRESETS.map((p) => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}${p.description ? ' · ' + escapeHtml(p.description) : ''}</option>`).join('');
+    } catch (e) { toast('预设列表加载失败: ' + e.message); }
+  }
+  if (presetName) {
+    $('f-preset').value = presetName;
+    applyPresetFields();
+  }
+}
+function closeAddModal() { $('add-modal').style.display = 'none'; }
+$('btn-add').onclick = () => openAddModal();
+$('btn-add-wb').onclick = () => {
+  $('wb-modal').style.display = 'flex';
+  $('wb-batch-err').textContent = '';
+};
+$('wb-batch-cancel').onclick = () => { $('wb-modal').style.display = 'none'; };
+$('wb-modal').onclick = (e) => { if (e.target === $('wb-modal')) $('wb-modal').style.display = 'none'; };
+$('wb-open-device').onclick = () => { $('wb-modal').style.display = 'none'; openAddModal('workbuddy-intl'); };
+$('wb-batch-submit').onclick = async () => {
+  const err = $('wb-batch-err');
+  const tokens = $('wb-batch-tokens').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+  if (!tokens.length) { err.textContent = '请至少粘贴一个 access token'; return; }
+  err.textContent = `添加中（${tokens.length} 个）…`;
+  try {
+    const r = await api('/api/workbuddy/batch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        tokens,
+        model: $('wb-batch-model').value.trim() || 'deepseek-v4.1-flash',
+        priority: Number($('wb-batch-priority').value) || 60,
+      }),
+    });
+    const okN = (r.added || []).filter((x) => x.ok).length;
+    const bad = (r.added || []).filter((x) => !x.ok);
+    if (okN > 0) {
+      err.textContent = '';
+      toast(`已添加 ${okN} 个 WorkBuddy 账号进池子`);
+      $('wb-modal').style.display = 'none';
+      $('wb-batch-tokens').value = '';
+      refresh();
+    } else {
+      err.textContent = '全部失败：' + (bad[0]?.error || '未知错误');
+    }
+  } catch (e) { err.textContent = '批量导入失败：' + e.message; }
+};
+$('f-cancel').onclick = closeAddModal;
+$('add-modal').onclick = (e) => { if (e.target === $('add-modal')) closeAddModal(); };
+$('f-preset').onchange = applyPresetFields;
+// ---- WorkBuddy 国际版设备码授权（获取 access token 的网址）----
+let wbPollTimer = null;
+$('wb-start').onclick = async () => {
+  const info = $('wb-auth-info');
+  try {
+    const r = await api('/api/workbuddy/auth/start', { method: 'POST' });
+    if (!r.ok || !r.authUrl) throw new Error(r.error || '未返回 authUrl');
+    info.innerHTML = `请打开链接完成登录（获取 Access Token）：<br><a href="${escapeHtml(r.authUrl)}" target="_blank" rel="noopener">${escapeHtml(r.authUrl)}</a><br><span class="hint">登录完成后网关自动获取 token 并添加渠道，无需复制粘贴。</span>`;
+    clearInterval(wbPollTimer);
+    wbPollTimer = setInterval(async () => {
+      try {
+        const p = await api('/api/workbuddy/auth/poll?state=' + encodeURIComponent(r.state));
+        if (p.status === 'authorized') {
+          clearInterval(wbPollTimer);
+          info.textContent = '授权成功，渠道已添加：' + (p.channel?.name || '');
+          toast('已添加 WorkBuddy 账号 ' + (p.channel?.name || ''));
+          closeAddModal();
+          ['f-name', 'f-key', 'f-model', 'f-desc', 'f-refresh', 'f-userid'].forEach((id) => ($(id).value = ''));
+          refresh();
+        } else if (p.status === 'expired') {
+          clearInterval(wbPollTimer);
+          info.textContent = '授权已过期，请重新开始授权';
+        } else if (p.error) {
+          clearInterval(wbPollTimer);
+          info.textContent = '授权出错：' + p.error;
+        }
+      } catch (e) { /* 网络抖动，下一轮再试 */ }
+    }, 5000);
+  } catch (e) {
+    info.textContent = '开始授权失败：' + e.message;
+  }
+};
+$('f-submit').onclick = async () => {
+  const preset = $('f-preset').value;
+  const isWb = preset === 'workbuddy-intl';
+  const payload = {
+    name: $('f-name').value.trim(),
+    apiKey: $('f-key').value.trim(),
+    model: $('f-model').value.trim(),
+    effort: $('f-effort').value,
+    maxEffort: $('f-maxeffort').value,
+    priority: Number($('f-priority').value) || 100,
+    description: $('f-desc').value.trim(),
+  };
+  if (isWb) {
+    const uid = $('f-userid').value.trim();
+    const rt = $('f-refresh').value.trim();
+    if (uid) payload.headers = { 'X-User-Id': uid };
+    if (rt) payload.refreshToken = rt;
+    if (!payload.model) payload.model = 'deepseek-v4.1-flash';
+  }
+  if (preset) payload.preset = preset;
+  else {
+    payload.baseUrl = $('f-baseurl').value.trim();
+    payload.protocol = $('f-protocol').value;
+  }
+  try {
+    const r = await api('/api/channels', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    toast(`已添加渠道 ${r.channel?.name || payload.name}`);
+    closeAddModal();
+    ['f-name', 'f-key', 'f-model', 'f-desc'].forEach((id) => ($(id).value = ''));
+    refresh();
+  } catch (e) { $('f-err').textContent = e.message; }
+};
+
+// 删除渠道（事件委托）
+$('channels').addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-del]');
+  if (!btn) return;
+  const name = btn.getAttribute('data-del');
+  if (!confirm(`确定删除渠道 "${name}"？会同时写回 config.json。`)) return;
+  try {
+    await api('/api/channels/' + encodeURIComponent(name), { method: 'DELETE' });
+    toast(`已删除 ${name}`);
+    refresh();
+  } catch (err) { toast('删除失败: ' + err.message); }
+});
+
+$('baseurl').textContent = location.origin + '/v1';
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>

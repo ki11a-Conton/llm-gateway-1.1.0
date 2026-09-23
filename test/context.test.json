@@ -1,0 +1,24 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8796, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "sticky": true,
+    "maxAttempts": 4,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 30000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": true,
+    "retryWaitMs": 300,
+    "retryMaxWaitMs": 30000,
+    "tiered": false
+  },
+  "unifiedModel": "auto",
+  "channels": [
+    { "name": "small", "protocol": "openai", "baseUrl": "http://127.0.0.1:9112", "apiKey": "k", "model": "small-model", "contextWindow": 100, "priority": 10 },
+    { "name": "big",   "protocol": "openai", "baseUrl": "http://127.0.0.1:9113", "apiKey": "k", "model": "big-model",   "contextWindow": 1000000, "priority": 90 }
+  ]
+}

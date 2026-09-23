@@ -1,0 +1,33 @@
+{
+  "_说明": [
+    "自定义 provider 预设。文件名固定为 providers.json，放在项目根目录，启动时自动加载。",
+    "这里的条目会覆盖同名内置预设（内置列表用 node server.mjs --list-presets 查看）。",
+    "字段说明：",
+    "  protocol    openai | anthropic",
+    "  baseUrl     上游根地址，结尾的 /v1 可写可不写",
+    "  chatPath    可选，覆盖默认的对话路径（openai 默认 /chat/completions，anthropic 默认 /messages）",
+    "  modelsPath  可选，覆盖默认的模型列表路径（默认 /models）",
+    "  apiKey      可选，预设默认值（本地服务常用固定占位值）",
+    "  priority    可选，数字越小越优先",
+    "  headers     可选，额外请求头",
+    "  maxTokens   可选，anthropic 协议下 OpenAI 请求没带 max_tokens 时的默认值",
+    "  description 可选，面板上显示的备注"
+  ],
+
+  "myproxy": {
+    "protocol": "openai",
+    "baseUrl": "https://my-proxy.example.com/v1",
+    "priority": 60,
+    "headers": { "X-Custom-Token": "abc" },
+    "description": "我的私有中转"
+  },
+
+  "_example_azure": {
+    "protocol": "openai",
+    "baseUrl": "https://my-resource.openai.azure.com/openai",
+    "chatPath": "/deployments/my-deployment/chat/completions",
+    "modelsPath": "/models",
+    "headers": { "api-key": "你的 azure key" },
+    "description": "Azure OpenAI（路径与鉴权头都和标准 OpenAI 不同，用 chatPath 覆盖）"
+  }
+}

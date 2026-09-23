@@ -1,0 +1,40 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8791, "apiKey": "TESTKEY", "panel": true },
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 3,
+    "timeoutMs": 20000,
+    "failThreshold": 2,
+    "cooldownMs": 30000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "tiered": false
+  },
+  "routes": {
+    "test-model-2": ["anth", "good"]
+  },
+  "channels": [
+    {
+      "name": "bad",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9102",
+      "apiKey": "k",
+      "priority": 1
+    },
+    {
+      "name": "good",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "k",
+      "priority": 2
+    },
+    {
+      "name": "anth",
+      "protocol": "anthropic",
+      "baseUrl": "http://127.0.0.1:9103",
+      "apiKey": "k",
+      "priority": 3,
+      "models": ["claude-test"]
+    }
+  ]
+}

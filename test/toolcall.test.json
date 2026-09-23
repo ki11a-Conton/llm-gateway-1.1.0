@@ -1,0 +1,24 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8800, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "tiered": false,
+    "maxAttempts": 3,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 30000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": true,
+    "retryWaitMs": 300,
+    "retryMaxWaitMs": 30000
+  },
+  "unifiedModel": "auto",
+  "channels": [
+    { "name": "leaky-off", "protocol": "openai", "baseUrl": "http://127.0.0.1:9119", "apiKey": "k", "model": "off-model", "priority": 30, "retries": 1, "guardToolCallText": false },
+    { "name": "leaky", "protocol": "openai", "baseUrl": "http://127.0.0.1:9119", "apiKey": "k", "model": "guard-model", "priority": 10, "retries": 1 },
+    { "name": "good", "protocol": "openai", "baseUrl": "http://127.0.0.1:9101", "apiKey": "k", "model": "test-model-1", "priority": 20 }
+  ]
+}

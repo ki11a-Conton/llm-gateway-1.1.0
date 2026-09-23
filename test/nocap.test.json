@@ -1,0 +1,18 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8798, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 1,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 50,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": true,
+    "retryWaitMs": 300,
+    "retryMaxWaitMs": 0
+  },
+  "channels": [
+    { "name": "t-429", "protocol": "openai", "baseUrl": "http://127.0.0.1:9108", "apiKey": "k", "model": "flaky-429" }
+  ]
+}

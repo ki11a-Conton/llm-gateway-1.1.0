@@ -1,0 +1,27 @@
+{
+  "server": { "host": "127.0.0.1", "port": 8803, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 8,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 60000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "retryLoop": true,
+    "retryWaitMs": 200,
+    "retryMaxWaitMs": 3000,
+    "maxTotalWaitMs": 12000,
+    "tiered": false,
+    "reasoningGuard": true
+  },
+  "channels": [
+    { "name": "leak-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9125", "apiKey": "k", "models": ["leak-think"], "priority": 5 },
+    { "name": "rf-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9126", "apiKey": "k", "models": ["reason-field"], "priority": 5 },
+    { "name": "reason-only-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9127", "apiKey": "k", "models": ["reason-only"], "priority": 5 },
+
+    { "name": "empty-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9131", "apiKey": "k", "models": ["empty-model"], "priority": 1 },
+    { "name": "ok-1", "protocol": "openai", "baseUrl": "http://127.0.0.1:9101", "apiKey": "k", "models": ["empty-model"], "priority": 99 }
+  ]
+}

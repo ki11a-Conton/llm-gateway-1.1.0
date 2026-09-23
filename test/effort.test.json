@@ -1,0 +1,45 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8794,
+    "apiKey": "TESTKEY"
+  },
+  "routing": {
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0
+  },
+  "effortMap": {
+    "deepseek-chat": {
+      "high": "deepseek-reasoner"
+    }
+  },
+  "channels": [
+    {
+      "name": "ds-chat",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "k",
+      "model": "deepseek-chat",
+      "effort": "medium",
+      "priority": 10
+    },
+    {
+      "name": "ds-reasoner",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9105",
+      "apiKey": "k",
+      "model": "deepseek-reasoner",
+      "effort": "high",
+      "priority": 20
+    },
+    {
+      "name": "cl-think",
+      "protocol": "anthropic",
+      "baseUrl": "http://127.0.0.1:9103",
+      "apiKey": "k",
+      "model": "claude-test",
+      "effort": "high",
+      "priority": 10
+    }
+  ]
+}
