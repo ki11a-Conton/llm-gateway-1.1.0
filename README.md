@@ -143,7 +143,8 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `baseUrl` | ✅ | 上游根地址，`/v1` 可省 |
 | `protocol` | | `openai`（默认）或 `anthropic` |
 | `apiKey` | ✅ | 支持 `${ENV_VAR}`；为空则该渠道自动停用。也兼容写多行字符串（每行一个 key） |
-| `apiKeys` | | **叠加 key**：同一 baseUrl 下的多个 key（数组），请求时并行竞速取最先成功者。见 §2.1.8 |
+| `apiKeys` | | **叠加 key**：同一 baseUrl 下的多个 key（数组）。内部调度由 `stackedKeyStrategy` 决定（默认 `race` 并行竞速）。见 §2.1.8 |
+| `stackedKeyStrategy` | | 叠 Key **内部**调度策略（仅 `apiKeys.length > 1` 时生效）：`race`（默认，全量并发竞速）或 `rotate-429`（Key 内部轮转 + 429 快切）。**只影响这条渠道内部用哪个 Key，绝不参与渠道选路** |
 | `priority` | | 数字越小越优先；同级按平均延迟排序 |
 | `enabled` | | 显式开关。不写时按"有没有 key"自动判断 |
 | `models` | | 白名单。留空 → 启动时自动发现。**发现成功的渠道只认自己列表里的模型**，不会抢别家的单 |
@@ -315,9 +316,41 @@ POST /api/workbuddy/batch   {"tokens": ["tk1","tk2",...], "model": "deepseek-v4.
 
 面板上的「拉取模型」和「拉取并保存」两个按钮就是这两个操作。注意：**没有配 apiKey 的渠道拉取会失败**，先填 key。
 
-#### 2.1.8 叠加 key（同一家多 key 并行竞速）
+#### 2.1.8 叠加 key（同一家多 key）——两种内部策略
 
-同一家供应商（**同一个 baseUrl**）手里有多个 key 时，可以把它们**叠在一条渠道**里：请求时对这些 key **并行竞速**——同一份请求同时发出，第一个返回成功（2xx）的 key 胜出，其余请求**立刻取消**（不再占连接、不再消耗上游生成）。效果 = "至少有一个 key 能成功"，并用最快响应的那个 key 来服务本次请求。
+同一家供应商（**同一个 baseUrl**）手里有多个 key 时，可以把它们**叠在一条渠道**里，由 `stackedKeyStrategy` 决定这条渠道**内部**怎么用这些 key。
+
+> ⚠️ **两层轮转，务必分清**（这也是最容易搞混的地方）：
+>
+> - **渠道级轮询**（`routing.strategy` = `priority` / `round-robin` / `weighted` / `least-loaded`，以及两段式 `preferred`+`fallback`、渠道熔断、`sticky` / `sessionAffinity`）决定的是：**这次请求走哪一家渠道**。
+> - **叠 Key 内部轮转**（`stackedKeyStrategy`）决定的是：**已经选中某一条渠道之后，用这条渠道里的哪个 Key**。
+>
+> 两个状态机**互不干扰**：Key 游标只在一条渠道内部转，**永远不会**改变渠道之间的选择顺序；反过来，渠道轮询怎么轮也不会动 Key 游标。
+
+```
+客户端请求
+   ↓
+渠道路由（routing.strategy）：A → B → A → B …        ← 决定“这次走哪一家渠道”
+   ↓  本次选中 A
+A 内部 Key（stackedKeyStrategy=rotate-429）：K1 → K2 → K3 → K4 → K5 → K1 …   ← 决定“用 A 的哪个 Key”
+```
+
+**策略一：`race`（默认，全量并发竞速）**
+
+同一份请求**同时**发给全部 key，第一个返回成功（2xx）的 key 胜出，其余请求**立刻取消**（不再占连接、不再消耗上游生成）。效果 = "至少有一个 key 能成功"，用最快响应的那个 key 服务本次请求。**成功率高，但积分消耗与上游并发也高**（一个请求最多打出 N 份）。
+
+**策略二：`rotate-429`（Key 内部轮转 + 429 快切）**
+
+一次只用一个 Key，环形游标逐个消费：`K1 → K2 → K3 → K4 → K5 → K1 …`
+
+- **规则 A**：只要一个 Key 真的被发出去，游标就**立刻**向前推进一格（不管它最后是 429 / 成功 / 网络失败）。
+- **规则 B**：收到 **429**（以及 401 / 402 / 403 / 5xx 等"可切 Key 错误"）**零额外等待**立即换下一个 Key——不 sleep、不指数退避、不等 `retryWaitMs`。
+- **规则 C**：**正常慢响应不切 Key**。上游"接了请求、慢慢生成"（商汤实测 9~17s，甚至约 20s）只受网关原有的首字节 / 总超时 / 静默超时约束，**不会**因为"慢"就启动下一个 Key。
+- **规则 D**：成功后结束本轮扫描，**下一条请求从后一个 Key 开始**（游标不回 K1）。例：`K1 429 → K2 429 → K3 成功`，游标已经到 K4，下一条从 K4 起。
+- **规则 E**：一次请求最多扫描 Key 池**一整圈**，绝不无限循环；整圈都失败才把错误交回**渠道级**降级逻辑。
+- **规则 F**：普通业务错误（如 400 参数错误）**不盲扫**后续 Key——整池重试无意义，直接交回渠道级。
+
+适合"共享池 + 快速 429 + 正常响应较慢"的供应商：**积分消耗与上游并发显著下降**（平均每请求用掉的 Key 数从 `race` 的 ≈ N 降到接近 1）。
 
 ```jsonc
 // config.json -> channels（一条渠道 = 一个 baseUrl + 多个 key）
@@ -326,19 +359,26 @@ POST /api/workbuddy/batch   {"tokens": ["tk1","tk2",...], "model": "deepseek-v4.
   "protocol": "openai",
   "baseUrl": "https://my-proxy.example.com/v1",
   "apiKeys": ["sk-aaa", "sk-bbb", "sk-ccc"],   // 叠加的多个 key
+  "stackedKeyStrategy": "rotate-429",          // race（默认）| rotate-429
   "model": "gpt-5",
   "priority": 40
 }
 ```
 
-- 只写 1 个 key 时仍用 `apiKey` 字符串，**旧配置形态与行为完全不变**（单 key 渠道不回 `x-gateway-key`）。
+- 只写 1 个 key 时仍用 `apiKey` 字符串，**旧配置形态与行为完全不变**（单 key 渠道不回 `x-gateway-key`，也不显示 Key 策略）。
 - `apiKeys` 也兼容把 `apiKey` 直接写成多行字符串；面板「添加供应商」的 **API Key 文本域每行填一个** key 就走这个形态。落盘时 1 个 key → `apiKey`，多个 → `apiKeys`。
-- 响应头 `x-gateway-key: 胜出序号/总数`（如 `2/3`）能看到本次是第几个 key 赢的（只回序号，不回 key 本身）。
-- key **不做单独的健康记忆**：每次请求都重发给全部 key，谁先成功用谁；某个 key 失效不会影响整条渠道（它只是每次都"陪跑"）。
-- 全部 key 都失败时，优先拿**非鉴权/非余额**的那个错误继续降级——避免单个 key 的 401/402 把整条渠道判死（鉴权/余额错误会让渠道被长冷却）。
-- 面板渠道卡片上会显示「叠加 N key」。
+- **不写 `stackedKeyStrategy` 时默认 `race`**（保持旧行为）；非法值直接报配置错误。
+- 响应头能看到本次用了哪个 Key、什么策略、尝试了几个（**只回序号 / 总数 / 策略名，绝不回 Key 明文**）：
+  ```
+  x-gateway-key: 3/5                 （本次最终命中的 Key 序号/总数）
+  x-gateway-key-strategy: rotate-429 （本渠道的 Key 内部策略）
+  x-gateway-key-attempts: 3          （本次从起点开始共尝试了几个 Key）
+  ```
+- `race` 模式下 key **不做单独的健康记忆**：每次请求都重发给全部 key，谁先成功用谁；某个 key 失效不影响整条渠道（它只是每次都"陪跑"）。
+- 全部 Key 都失败时：`race` 优先拿**非鉴权/非余额**的那个错误继续降级；`rotate-429` 整圈扫完后同样交回渠道级。两者都避免单个坏 Key 把整条渠道判死（只有鉴权/余额错误才会让渠道被长冷却）。
+- 面板渠道卡片上会显示「叠加 N key · 429快切 / 竞速」，渠道编辑区可选「叠 Key 内部策略」。
 
-> 想要"同名模型、多家渠道、故障切换"用 §2.1.1 的模型池；想"同一家、多 key、并行竞速"用这里的叠加 key。两者可同时用。
+> 想要"同名模型、多家渠道、故障切换"用 §2.1.1 的模型池；想"同一家、多 key"用这里的叠加 key。两者可同时用——前者管**渠道之间**，后者管**渠道内部**。
 
 ### 2.2 routing（选路与熔断）
 
@@ -594,7 +634,9 @@ x-gateway-upstream-model: deepseek-chat
 x-gateway-protocol: openai
 x-gateway-tier: preferred | fallback   （两段式选路命中的段）
 x-gateway-effort: high                 （注入了思考强度时）
-x-gateway-key: 2/3                     （叠加 key 渠道：本次竞速胜出的 key 序号/总数，只回序号）
+x-gateway-key: 2/3                     （叠加 key 渠道：本次命中的 key 序号/总数，只回序号）
+x-gateway-key-strategy: rotate-429     （叠加 key 渠道：本条渠道的 Key 内部策略 race | rotate-429）
+x-gateway-key-attempts: 3              （叠加 key 渠道：本次从起点开始共尝试了几个 key）
 x-gateway-agent: my-agent        （识别出子代理身份时回传）
 ```
 
@@ -691,6 +733,8 @@ node test/test-context.mjs                 # 12  上下文感知路由：窗口�
 node test/test-rewrite.mjs                 # 12  请求改写：max_tokens 下限
 node test/test-pool.mjs                    # 22  模型池：单模型渠道 / 同名多渠道路由
 node test/test-multikey-race.mjs           # 21  叠加 key：同 baseUrl 多 key 并行竞速取最先成功者 / 落败请求取消 / x-gateway-key / 单 key 渠道零变化 / 全失败取非鉴权错误降级 / 面板多行 key 落 apiKeys
+node test/test-multikey-rotate429.mjs      # 47  叠 Key rotate-429：环形游标 / 429 零等待快切 / 成功后游标前移 / 慢响应耐心等 / 整池 429 只扫一圈 / 401-402-403-5xx 换 Key / 普通 400 不盲扫 / 并发摊开 / race 零回归 / 响应头与叠 Key 指标
+node test/test-multikey-rotate-routing.mjs # 41  渠道路由零影响：多 Key(rotate-429) vs 单 Key 对照在 priority/round-robin/weighted/least-loaded/sticky/sessionAffinity/tiered 下渠道顺序逐位一致；Key 游标推进后顺序不变；HTTP 级 x-gateway-channel 序列与对照逐位一致
 node test/test-providers.mjs               # 12  自定义预设 + 模型拉取回写
 node test/test-admin-security.mjs          # 34  管理面安全：跨站 Origin 被拒 / 非法 Host 403 / 面板照常可用 / key 不外泄
 node test/test-metrics-observability.mjs   # 58  P3 验收：三段耗时分解 / 模型级指标 / 面板

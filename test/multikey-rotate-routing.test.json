@@ -1,0 +1,47 @@
+{
+  "_note": "TASK14 渠道路由零影响专用：Channel ra = 5 个 key + rotate-429，Channel rb = 普通单 key，两家同型号同优先级同 tier，routing.strategy=round-robin。测试用『把 ra 换成单 key 的对照配置』跑同样请求序列，x-gateway-channel 序列必须逐位一致。",
+  "server": { "host": "127.0.0.1", "port": 8816, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "round-robin",
+    "maxAttempts": 6,
+    "timeoutMs": 5000,
+    "firstByteTimeoutMs": 30000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 60000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "attemptsPerChannel": 1,
+    "retryLoop": false,
+    "retryWaitMs": 200,
+    "maxTotalWaitMs": 15000,
+    "tiered": false,
+    "fallbackShuffle": false,
+    "sessionAffinity": false,
+    "sticky": false,
+    "balanceCooldownMs": 60000,
+    "authCooldownMs": 60000
+  },
+  "channels": [
+    {
+      "name": "ra",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-fast-c1", "sk-fast-c2", "sk-fast-c3", "sk-fast-c4", "sk-fast-c5"],
+      "stackedKeyStrategy": "rotate-429",
+      "model": "rr-model",
+      "priority": 10,
+      "tier": "preferred"
+    },
+    {
+      "name": "rb",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "k",
+      "model": "rr-model",
+      "priority": 10,
+      "tier": "preferred"
+    }
+  ]
+}

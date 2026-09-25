@@ -1,0 +1,108 @@
+{
+  "_note": "叠 Key rotate-429（Key 内部轮转 + 429 快切）回归专用：mock 9144 按 key 前缀区分行为（sk-fast 立刻成功 / sk-slow 250ms 成功 / sk-r429 429 / sk-auth 401 / sk-402 402 / sk-403 403 / sk-400 400 / sk-boom 500）",
+  "server": { "host": "127.0.0.1", "port": 8815, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 12,
+    "timeoutMs": 5000,
+    "firstByteTimeoutMs": 30000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 60000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "attemptsPerChannel": 1,
+    "retryLoop": false,
+    "retryWaitMs": 200,
+    "maxTotalWaitMs": 15000,
+    "tiered": false,
+    "fallbackShuffle": false,
+    "sessionAffinity": false,
+    "sticky": false,
+    "balanceCooldownMs": 60000,
+    "authCooldownMs": 60000
+  },
+  "channels": [
+    {
+      "name": "rot-first",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-fast-a", "sk-r429-b"],
+      "stackedKeyStrategy": "rotate-429",
+      "model": "rot-first",
+      "priority": 10
+    },
+    {
+      "name": "rot-two429",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-r429-1", "sk-r429-2", "sk-fast-3", "sk-boom-4", "sk-boom-5"],
+      "stackedKeyStrategy": "rotate-429",
+      "model": "rot-two429",
+      "priority": 10
+    },
+    {
+      "name": "rot-slow",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-slow-a", "sk-boom-b"],
+      "stackedKeyStrategy": "rotate-429",
+      "model": "rot-slow",
+      "priority": 10
+    },
+    {
+      "name": "rot-all429",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-r429-1", "sk-r429-2"],
+      "stackedKeyStrategy": "rotate-429",
+      "model": "rot-all429",
+      "priority": 10
+    },
+    {
+      "name": "rot-all429-fb",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "k",
+      "model": "rot-all429",
+      "priority": 99
+    },
+    {
+      "name": "rot-401",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-auth-x", "sk-fast-y"],
+      "stackedKeyStrategy": "rotate-429",
+      "model": "rot-401",
+      "priority": 10
+    },
+    {
+      "name": "rot-400",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-400-x", "sk-fast-y"],
+      "stackedKeyStrategy": "rotate-429",
+      "model": "rot-400",
+      "priority": 10
+    },
+    {
+      "name": "rot-race",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-slow-r", "sk-fast-r", "sk-auth-r"],
+      "stackedKeyStrategy": "race",
+      "model": "rot-race",
+      "priority": 10
+    },
+    {
+      "name": "rot-conc",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-fast-c1", "sk-fast-c2", "sk-fast-c3", "sk-fast-c4", "sk-fast-c5"],
+      "stackedKeyStrategy": "rotate-429",
+      "model": "rot-conc",
+      "priority": 10
+    }
+  ]
+}

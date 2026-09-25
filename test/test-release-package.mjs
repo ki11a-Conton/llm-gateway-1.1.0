@@ -126,6 +126,7 @@ const GITIGNORE_PROBE = {
   'logs-test/': 'logs-test/tasks.jsonl',
   'config.wbtest.json': 'config.wbtest.json',
   '.workbuddy-ai/': '.workbuddy-ai/mem.md',
+  '.trae-html-share-packages/': '.trae-html-share-packages/index.html',
   'dist/': 'dist/out.zip',
   'docs/workbuddy-intl-task.md': 'docs/workbuddy-intl-task.md',
 };

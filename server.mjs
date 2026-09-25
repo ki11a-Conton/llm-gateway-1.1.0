@@ -16,6 +16,7 @@ import {
   sendJson,
   corsHeaders,
   openaiError,
+  getStackedKeyStats,
 } from './lib/proxy.mjs';
 import { fromAnthropicBody } from './lib/adapters/anthropic.mjs';
 import { identifyAgent } from './lib/agent.mjs';
@@ -384,6 +385,8 @@ const server = http.createServer(async (req, res) => {
         memory: { rss: mem.rss, heapUsed: mem.heapUsed, external: mem.external },
         concurrency: { ...conc, channels: busyChannels, agents: busyAgents },
         queueWait: Object.keys(queueWait).length ? queueWait : null,
+        // 叠 Key 专属指标（TASK 11）：与渠道级成功率隔离，供 /api/metrics 观察省积分效果
+        stackedKeys: getStackedKeyStats(),
         // 模型级聚合（P3 §3.3）：请求数 / 成功率 / 失败指纹 Top5 / 首字节 p50、p95
         models: tasklog.modelMetrics(),
         agents: manager.agentsView(),
@@ -396,6 +399,8 @@ const server = http.createServer(async (req, res) => {
           total: c.total,
           failed: c.failed,
           latency: Math.round(c.latency),
+          keyCount: c.usableKeys.length,
+          stackedKeyStrategy: c.usableKeys.length > 1 ? c.stackedKeyStrategy : null,
         })),
       });
     }

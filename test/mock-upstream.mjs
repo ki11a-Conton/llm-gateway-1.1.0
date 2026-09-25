@@ -742,12 +742,13 @@ start(9137, async (req, res) => {
 // ============================================================================
 // 9144: 按 key 区分行为的上游（测"一条渠道叠加多个 key，并行竞速"）
 // ============================================================================
-// 叠加 key 渠道会把同一个请求同时发给渠道里所有 key（各自带 Authorization: Bearer <key>）。
+// 叠加 key 渠道会把同一个请求发给渠道里某个/全部 key（各自带 Authorization: Bearer <key>）。
 // 本 mock 用 key 前缀模拟不同 key 的命运：
 //   sk-fast* 立刻成功    sk-slow* 延迟 250ms 后成功    sk-auth* 401    sk-boom* 500
+//   sk-r429* 立刻 429    sk-402* 402 余额不足          sk-403* 403      sk-400* 400 业务参数错误
 // /_stats 记录每个 key 的命中数（hits）与被取消数（aborted）：
 //   loser 被网关 abort 时响应还没写完，res 'close' 触发且 writableEnded 仍为 false -> 记一次 aborted。
-// 用例据此断言"三个 key 都收到了请求""慢 key 的请求确实被取消"。
+// 用例据此断言"三个 key 都收到了请求""慢 key 的请求确实被取消""后续 key 没有被调用"。
 const mkHits = Object.create(null);
 const mkAborted = Object.create(null);
 start(9144, async (req, res) => {
@@ -780,6 +781,18 @@ start(9144, async (req, res) => {
 
   if (key.startsWith('sk-auth')) {
     return json(res, 401, { error: { message: 'invalid api key', type: 'authentication_error' } });
+  }
+  if (key.startsWith('sk-r429')) {
+    return json(res, 429, { error: { message: 'rate limit exceeded', type: 'rate_limit_error' } });
+  }
+  if (key.startsWith('sk-402')) {
+    return json(res, 402, { error: { message: 'insufficient balance', type: 'billing_error' } });
+  }
+  if (key.startsWith('sk-403')) {
+    return json(res, 403, { error: { message: 'forbidden', type: 'permission_error' } });
+  }
+  if (key.startsWith('sk-400')) {
+    return json(res, 400, { error: { message: 'invalid_request: messages is required', type: 'invalid_request_error' } });
   }
   if (key.startsWith('sk-boom')) {
     return json(res, 500, { error: { message: 'upstream boom for key ' + key, type: 'server_error' } });

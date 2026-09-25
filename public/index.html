@@ -230,8 +230,17 @@
       </select></label>
       <label>渠道名 * <input id="f-name" placeholder="唯一标识，如 deepseek-a" /></label>
       <label>API Key（每行一个，可叠加多个）
-        <textarea id="f-key" rows="3" placeholder="sk-...（留空则先停用）&#10;sk-...（填多个 key 时：同一 baseUrl 下并行竞速，取最先成功的那个）" style="font-family:monospace;resize:vertical"></textarea>
+        <textarea id="f-key" rows="3" placeholder="sk-...（留空则先停用）&#10;sk-...（填多个 key 时：同一 baseUrl 下按下方「Key 内部策略」调度）" style="font-family:monospace;resize:vertical"></textarea>
       </label>
+      <label id="f-key-strategy-row" style="display:none">叠 Key 内部策略（仅多个 key 时生效）
+        <select id="f-key-strategy">
+          <option value="race">全量并发竞速：所有 Key 同时发，取最先成功的 —— 成功率高，积分与上游并发消耗高</option>
+          <option value="rotate-429">Key 内部轮转 + 429 快切：一次只用一个 Key，429 立即换下一个，成功后下一条从下一个 Key 开始</option>
+        </select>
+      </label>
+      <div id="f-key-strategy-hint" class="hint" style="display:none">
+        仅影响本条渠道内部的 API Key 使用顺序，不改变渠道之间的路由（routing.strategy / 轮询 / 权重 / 粘性都不受影响）。
+      </div>
       <div id="wb-auth-row" style="display:none;border:1px dashed var(--border);padding:10px;border-radius:8px">
         <div style="margin-bottom:8px"><b>WorkBuddy 国际版授权</b> <span class="hint">推荐：自动获取 access_token 并落号</span></div>
         <button type="button" id="wb-start" style="background:var(--accent);border-color:var(--accent);color:#fff">开始授权 / 获取 Access Token</button>
@@ -355,7 +364,7 @@ function render(data) {
           ${c.effort ? `<span class="effort-tag" title="思考强度标签：请求带对应 reasoning_effort 时优先路由到这里">${escapeHtml(c.effort)}</span>` : ''}
           <span class="badge ${cls}">${label}</span>
           ${c.creditRemain != null ? `<span class="badge b-idle" title="账号剩余额度（每小时自动刷新）">余额 ${c.creditRemain}</span>` : ''}
-          ${c.keyCount > 1 ? `<span class="badge b-idle" title="叠加 key：同一 baseUrl 下 ${c.keyCount} 个 key 并行竞速，取最先成功的那个">叠加 ${c.keyCount} key</span>` : ''}
+          ${c.keyCount > 1 ? `<span class="badge b-idle" title="叠 Key 内部策略（只影响这条渠道内部用哪个 Key，不影响渠道之间的路由）：${c.stackedKeyStrategy === 'rotate-429' ? 'Key 内部轮转 + 429 快切，一次只用 1 个 Key' : '全量并发竞速，所有 Key 同时发'}">叠加 ${c.keyCount} key · ${c.stackedKeyStrategy === 'rotate-429' ? '429快切' : '竞速'}</span>` : ''}
           <span class="proto">${escapeHtml(c.protocol)}</span>
           <button class="ch-del" data-del="${escapeHtml(c.name)}" title="从 config.json 删除该渠道">×</button>
         </div>
@@ -837,6 +846,7 @@ function applyPresetFields() {
 async function openAddModal(presetName = '') {
   $('add-modal').style.display = 'flex';
   $('f-err').textContent = '';
+  updateKeyStrategyRow();
   if (!PRESETS.length) {
     try {
       const r = await api('/api/presets');
@@ -890,6 +900,13 @@ $('wb-batch-submit').onclick = async () => {
 $('f-cancel').onclick = closeAddModal;
 $('add-modal').onclick = (e) => { if (e.target === $('add-modal')) closeAddModal(); };
 $('f-preset').onchange = applyPresetFields;
+// 叠 Key 内部策略字段：只在"填了多个 key"时才出现（单 key 渠道没有 Key 策略可言）
+function updateKeyStrategyRow() {
+  const multi = $('f-key').value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean).length > 1;
+  $('f-key-strategy-row').style.display = multi ? 'flex' : 'none';
+  $('f-key-strategy-hint').style.display = multi ? 'block' : 'none';
+}
+$('f-key').oninput = updateKeyStrategyRow;
 // ---- WorkBuddy 国际版设备码授权（获取 access token 的网址）----
 let wbPollTimer = null;
 $('wb-start').onclick = async () => {
@@ -925,7 +942,7 @@ $('wb-start').onclick = async () => {
 $('f-submit').onclick = async () => {
   const preset = $('f-preset').value;
   const isWb = preset === 'workbuddy-intl';
-  // 叠加 key：每行一个（也兼容逗号分隔）。1 个就是普通渠道，多个则同 baseUrl 并行竞速。
+  // 叠加 key：每行一个（也兼容逗号分隔）。1 个就是普通渠道，多个则按「Key 内部策略」调度。
   const keys = $('f-key').value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
   const payload = {
     name: $('f-name').value.trim(),
@@ -937,6 +954,8 @@ $('f-submit').onclick = async () => {
     priority: Number($('f-priority').value) || 100,
     description: $('f-desc').value.trim(),
   };
+  // 只对多 Key 渠道带上 Key 内部策略；单 Key 不写（后端也会归一为 race）
+  if (keys.length > 1) payload.stackedKeyStrategy = $('f-key-strategy').value;
   if (isWb) {
     const uid = $('f-userid').value.trim();
     const rt = $('f-refresh').value.trim();

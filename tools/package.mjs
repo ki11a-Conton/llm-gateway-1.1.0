@@ -42,6 +42,7 @@ export const EXCLUDE_FILES = [
 export const EXCLUDE_DIRS = [
   '.git',
   '.workbuddy-ai',   // AI 工具的记忆/会话元数据
+  '.trae-html-share-packages', // AI 工具生成的 HTML 分享包产物，不属于项目源码
   'node_modules',
   'logs',            // 任务日志：含上游错误文本
   'logs-test',
