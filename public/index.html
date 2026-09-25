@@ -100,11 +100,11 @@
   .modal h3 { margin: 0 0 16px; font-size: 16px; }
   .form { display: flex; flex-direction: column; gap: 11px; }
   .form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-  .form input, .form select {
+  .form input, .form select, .form textarea {
     border: 1px solid var(--line); border-radius: 7px; padding: 7px 10px; font-size: 13px; color: var(--text);
     font-family: inherit;
   }
-  .form input:focus, .form select:focus { outline: none; border-color: var(--accent); }
+  .form input:focus, .form select:focus, .form textarea:focus { outline: none; border-color: var(--accent); }
   .modal-actions { display: flex; align-items: center; gap: 8px; margin-top: 18px; }
   .modal-actions button { margin-left: auto; }
   .modal-actions button + button { margin-left: 0; }
@@ -229,7 +229,9 @@
         <option value="anthropic">Anthropic 原生（Anthropic 官方或 Claude 原生中转）</option>
       </select></label>
       <label>渠道名 * <input id="f-name" placeholder="唯一标识，如 deepseek-a" /></label>
-      <label>API Key <input id="f-key" placeholder="sk-...（留空则先停用）" /></label>
+      <label>API Key（每行一个，可叠加多个）
+        <textarea id="f-key" rows="3" placeholder="sk-...（留空则先停用）&#10;sk-...（填多个 key 时：同一 baseUrl 下并行竞速，取最先成功的那个）" style="font-family:monospace;resize:vertical"></textarea>
+      </label>
       <div id="wb-auth-row" style="display:none;border:1px dashed var(--border);padding:10px;border-radius:8px">
         <div style="margin-bottom:8px"><b>WorkBuddy 国际版授权</b> <span class="hint">推荐：自动获取 access_token 并落号</span></div>
         <button type="button" id="wb-start" style="background:var(--accent);border-color:var(--accent);color:#fff">开始授权 / 获取 Access Token</button>
@@ -353,6 +355,7 @@ function render(data) {
           ${c.effort ? `<span class="effort-tag" title="思考强度标签：请求带对应 reasoning_effort 时优先路由到这里">${escapeHtml(c.effort)}</span>` : ''}
           <span class="badge ${cls}">${label}</span>
           ${c.creditRemain != null ? `<span class="badge b-idle" title="账号剩余额度（每小时自动刷新）">余额 ${c.creditRemain}</span>` : ''}
+          ${c.keyCount > 1 ? `<span class="badge b-idle" title="叠加 key：同一 baseUrl 下 ${c.keyCount} 个 key 并行竞速，取最先成功的那个">叠加 ${c.keyCount} key</span>` : ''}
           <span class="proto">${escapeHtml(c.protocol)}</span>
           <button class="ch-del" data-del="${escapeHtml(c.name)}" title="从 config.json 删除该渠道">×</button>
         </div>
@@ -922,9 +925,12 @@ $('wb-start').onclick = async () => {
 $('f-submit').onclick = async () => {
   const preset = $('f-preset').value;
   const isWb = preset === 'workbuddy-intl';
+  // 叠加 key：每行一个（也兼容逗号分隔）。1 个就是普通渠道，多个则同 baseUrl 并行竞速。
+  const keys = $('f-key').value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
   const payload = {
     name: $('f-name').value.trim(),
-    apiKey: $('f-key').value.trim(),
+    apiKey: keys[0] ?? '',
+    apiKeys: keys,
     model: $('f-model').value.trim(),
     effort: $('f-effort').value,
     maxEffort: $('f-maxeffort').value,

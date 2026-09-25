@@ -142,7 +142,8 @@ curl http://127.0.0.1:8787/v1/chat/completions \
 | `name` | ✅ | 渠道唯一名 |
 | `baseUrl` | ✅ | 上游根地址，`/v1` 可省 |
 | `protocol` | | `openai`（默认）或 `anthropic` |
-| `apiKey` | ✅ | 支持 `${ENV_VAR}`；为空则该渠道自动停用 |
+| `apiKey` | ✅ | 支持 `${ENV_VAR}`；为空则该渠道自动停用。也兼容写多行字符串（每行一个 key） |
+| `apiKeys` | | **叠加 key**：同一 baseUrl 下的多个 key（数组），请求时并行竞速取最先成功者。见 §2.1.8 |
 | `priority` | | 数字越小越优先；同级按平均延迟排序 |
 | `enabled` | | 显式开关。不写时按"有没有 key"自动判断 |
 | `models` | | 白名单。留空 → 启动时自动发现。**发现成功的渠道只认自己列表里的模型**，不会抢别家的单 |
@@ -245,13 +246,14 @@ Anthropic 客户端（`/v1/messages`）传 `thinking: {type:"enabled", budget_to
 
 #### 2.1.5 面板添加 / 删除供应商
 
-面板右上角「**＋ 添加供应商**」：预设下拉选「自定义（手填 baseUrl）」时可选**协议**（OpenAI 兼容 / Anthropic 原生），再填渠道名 + apiKey + baseUrl + 绑定模型 + 思考强度 + 优先级，提交后直接写回 `config.json` 并热重载，不用手动编辑文件。渠道卡片右上角「×」可删除（同样写回配置，并自动清理 `routes` 里的引用）。
+面板右上角「**＋ 添加供应商**」：预设下拉选「自定义（手填 baseUrl）」时可选**协议**（OpenAI 兼容 / Anthropic 原生），再填渠道名 + apiKey + baseUrl + 绑定模型 + 思考强度 + 优先级，提交后直接写回 `config.json` 并热重载，不用手动编辑文件。**API Key 是多行文本域（每行一个 key）**——填多个即落成 §2.1.8 的叠加 key 渠道，渠道卡片上显示「叠加 N key」。渠道卡片右上角「×」可删除（同样写回配置，并自动清理 `routes` 里的引用）。
 
 对应 HTTP 接口：
 
 ```
 GET    /api/presets            列出可用预设
-POST   /api/channels           添加渠道 {name, preset?, baseUrl?, apiKey?, model?, effort?, priority?, description?}
+POST   /api/channels           添加渠道 {name, preset?, baseUrl?, apiKey?, apiKeys?, model?, effort?, priority?, description?}
+                               （apiKey 支持多行/逗号分隔；多个 key -> apiKeys 叠加竞速）
 DELETE /api/channels/<name>    删除渠道
 ```
 
@@ -312,6 +314,31 @@ POST /api/workbuddy/batch   {"tokens": ["tk1","tk2",...], "model": "deepseek-v4.
 > 其它细节：余额接口 `/v2/billing/meter/get-user-resource`；定时续期/刷新由渠道后台任务驱动，失败只记日志不阻塞；上游 `discover` 不需要（预置单模型），模型列表接口 401 属预期。
 
 面板上的「拉取模型」和「拉取并保存」两个按钮就是这两个操作。注意：**没有配 apiKey 的渠道拉取会失败**，先填 key。
+
+#### 2.1.8 叠加 key（同一家多 key 并行竞速）
+
+同一家供应商（**同一个 baseUrl**）手里有多个 key 时，可以把它们**叠在一条渠道**里：请求时对这些 key **并行竞速**——同一份请求同时发出，第一个返回成功（2xx）的 key 胜出，其余请求**立刻取消**（不再占连接、不再消耗上游生成）。效果 = "至少有一个 key 能成功"，并用最快响应的那个 key 来服务本次请求。
+
+```jsonc
+// config.json -> channels（一条渠道 = 一个 baseUrl + 多个 key）
+{
+  "name": "myproxy-stacked",
+  "protocol": "openai",
+  "baseUrl": "https://my-proxy.example.com/v1",
+  "apiKeys": ["sk-aaa", "sk-bbb", "sk-ccc"],   // 叠加的多个 key
+  "model": "gpt-5",
+  "priority": 40
+}
+```
+
+- 只写 1 个 key 时仍用 `apiKey` 字符串，**旧配置形态与行为完全不变**（单 key 渠道不回 `x-gateway-key`）。
+- `apiKeys` 也兼容把 `apiKey` 直接写成多行字符串；面板「添加供应商」的 **API Key 文本域每行填一个** key 就走这个形态。落盘时 1 个 key → `apiKey`，多个 → `apiKeys`。
+- 响应头 `x-gateway-key: 胜出序号/总数`（如 `2/3`）能看到本次是第几个 key 赢的（只回序号，不回 key 本身）。
+- key **不做单独的健康记忆**：每次请求都重发给全部 key，谁先成功用谁；某个 key 失效不会影响整条渠道（它只是每次都"陪跑"）。
+- 全部 key 都失败时，优先拿**非鉴权/非余额**的那个错误继续降级——避免单个 key 的 401/402 把整条渠道判死（鉴权/余额错误会让渠道被长冷却）。
+- 面板渠道卡片上会显示「叠加 N key」。
+
+> 想要"同名模型、多家渠道、故障切换"用 §2.1.1 的模型池；想"同一家、多 key、并行竞速"用这里的叠加 key。两者可同时用。
 
 ### 2.2 routing（选路与熔断）
 
@@ -567,6 +594,7 @@ x-gateway-upstream-model: deepseek-chat
 x-gateway-protocol: openai
 x-gateway-tier: preferred | fallback   （两段式选路命中的段）
 x-gateway-effort: high                 （注入了思考强度时）
+x-gateway-key: 2/3                     （叠加 key 渠道：本次竞速胜出的 key 序号/总数，只回序号）
 x-gateway-agent: my-agent        （识别出子代理身份时回传）
 ```
 
@@ -662,6 +690,7 @@ node test/test-effort-levels.mjs           # 21  档位体系：routing.maxEffor
 node test/test-context.mjs                 # 12  上下文感知路由：窗口装不下的渠道被跳过
 node test/test-rewrite.mjs                 # 12  请求改写：max_tokens 下限
 node test/test-pool.mjs                    # 22  模型池：单模型渠道 / 同名多渠道路由
+node test/test-multikey-race.mjs           # 21  叠加 key：同 baseUrl 多 key 并行竞速取最先成功者 / 落败请求取消 / x-gateway-key / 单 key 渠道零变化 / 全失败取非鉴权错误降级 / 面板多行 key 落 apiKeys
 node test/test-providers.mjs               # 12  自定义预设 + 模型拉取回写
 node test/test-admin-security.mjs          # 34  管理面安全：跨站 Origin 被拒 / 非法 Host 403 / 面板照常可用 / key 不外泄
 node test/test-metrics-observability.mjs   # 58  P3 验收：三段耗时分解 / 模型级指标 / 面板
@@ -753,7 +782,7 @@ llm-gateway/
 └── test/
     ├── lib/ports.mjs       动态端口工具：freePort / freePortBlock / mockUpstreamPorts / materializeConfig
     ├── run-all.mjs         一把跑完全部 suite（串行、实时输出、末尾汇总，退出码 = 失败套件数）
-    ├── mock-upstream.mjs   假上游（逻辑端口 9101-9143：正常/500/429/余额不足/鉴权失败/空响应/伪空/思考/断流/可复活…；9141-9142：WorkBuddy 全家桶 + 风控）
+    ├── mock-upstream.mjs   假上游（逻辑端口 9101-9144：正常/500/429/余额不足/鉴权失败/空响应/伪空/思考/断流/可复活…；9141-9142：WorkBuddy 全家桶 + 风控；9144：叠加 key 按 key 区分行为）
     │                       逻辑端口可经环境变量 MOCK_PORT_BASE 整体平移；测试运行时动态分配并传进去
     ├── *.test.json          各 suite 的网关配置（固定端口只是逻辑标识，运行时被 materializeConfig 改写成动态端口）
     ├── smoke.mjs            冒烟
@@ -811,8 +840,8 @@ node tools/package.mjs --out D:\tmp # 换输出目录
    **独立实现的 CRC32**（按位算，不复用打包器的查表版）复核，避免同错同销；另校验 sha256 收据
    与实际字节一致、EOCD 位置、以及路径卫生（全部 `llm-gateway/` 前缀、无绝对路径 / `..` / 反斜杠）。
 3. **内容层**：包内文本文件里出现的密钥特征必须全部落在「已知假 key」白名单里，白名单本身还受
-   一条反向断言约束（名字是否名存实亡）；`config.example.json` 的 15 个渠道 `apiKey` 只允许
-   `${ENV}` / `PROXY_MANAGED` / `TESTKEY` 这类占位形态。
+   一条反向断言约束（名字是否名存实亡）；`config.example.json` 各渠道的 `apiKey` / `apiKeys`
+   只允许 `${ENV}` / `PROXY_MANAGED` / `TESTKEY` 这类占位形态。
 
 > **已知且刻意保留**：`test/test-outbound-proxy-abort.mjs` 内含一份 **throwaway 自签证书私钥**
 > （CN=localhost，仅用于出站代理的 CONNECT + TLS 回归）。它是测试夹具、不是真实凭据，

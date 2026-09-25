@@ -21,7 +21,11 @@
     "池子总入口：unifiedModel 填一个统一名（如 \"auto\"）后，/v1/models 只显示它；",
     "  调用它会路由到池子里任何一个可用的渠道（各家用自己绑定的模型）。不填则显示全部真实模型名",
     "兜底模型：fallbackModel 填池子里存在的模型名（如 \"deepseek-chat\"），",
-    "  客户端/agent 传来池子里没有的模型名时（如 agent 的 'auto'）自动改调它，不填则报 model_not_found"
+    "  客户端/agent 传来池子里没有的模型名时（如 agent 的 'auto'）自动改调它，不填则报 model_not_found",
+    "叠加 key（同一家多 key 并行竞速）：同一条渠道写 apiKeys 数组（固定同一个 baseUrl），",
+    "  请求时把同一份请求同时发给这些 key，第一个成功（2xx）的 key 胜出，其余请求立刻取消；",
+    "  只写 1 个 key 时仍用 apiKey 字符串（旧配置形态不变）。响应头 x-gateway-key = \"胜出序号/总数\"。",
+    "  全部 key 失败时优先拿『非鉴权/非余额』的错误继续降级，避免一个坏 key 把整条渠道判死"
   ],
 
   "server": {
@@ -271,6 +275,16 @@
       "model": "gpt-5",
       "maxEffort": "high",
       "priority": 30,
+      "enabled": false
+    },
+    {
+      "name": "my-provider-stacked",
+      "_note": "叠加 key 示例：同一个 baseUrl 下挂多个 key（apiKeys 数组），请求时并行竞速，第一个成功的胜出。面板「添加供应商」的 API Key 文本域每行一个 key 也能落成这个形态",
+      "protocol": "openai",
+      "baseUrl": "https://my-proxy.example.com/v1",
+      "apiKeys": ["${MY_PROXY_KEY_1}", "${MY_PROXY_KEY_2}", "${MY_PROXY_KEY_3}"],
+      "model": "gpt-5",
+      "priority": 40,
       "enabled": false
     }
   ]

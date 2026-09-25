@@ -1,0 +1,67 @@
+{
+  "_note": "叠加 key 并行竞速回归专用：mock 9144 按 key 前缀区分行为（sk-fast 立刻成功 / sk-slow 延迟成功 / sk-auth 401 / sk-boom 500）",
+  "server": { "host": "127.0.0.1", "port": 8814, "apiKey": "TESTKEY" },
+  "routing": {
+    "strategy": "priority",
+    "maxAttempts": 12,
+    "timeoutMs": 5000,
+    "streamIdleTimeoutMs": 5000,
+    "failThreshold": 2,
+    "cooldownMs": 60000,
+    "maxCooldownMs": 600000,
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0,
+    "attemptsPerChannel": 1,
+    "retryLoop": false,
+    "retryWaitMs": 200,
+    "maxTotalWaitMs": 8000,
+    "tiered": false,
+    "fallbackShuffle": false,
+    "sessionAffinity": false,
+    "sticky": false,
+    "balanceCooldownMs": 60000,
+    "authCooldownMs": 60000
+  },
+  "channels": [
+    {
+      "name": "mk-race",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-slow-a", "sk-fast-a", "sk-auth-a"],
+      "model": "mk-model",
+      "priority": 10
+    },
+    {
+      "name": "mk-single",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "k",
+      "model": "single-model",
+      "priority": 10
+    },
+    {
+      "name": "mk-allfail",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-auth-b", "sk-boom-b"],
+      "model": "fail-model",
+      "priority": 10
+    },
+    {
+      "name": "mk-allfail-fb",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "k",
+      "model": "fail-model",
+      "priority": 99
+    },
+    {
+      "name": "mk-strictfail",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9144",
+      "apiKeys": ["sk-auth-c", "sk-boom-c"],
+      "model": "strict-model",
+      "priority": 10
+    }
+  ]
+}

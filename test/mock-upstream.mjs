@@ -2,8 +2,8 @@
 import http from 'node:http';
 
 // P5：端口整体可平移。设置 MOCK_PORT_BASE=B 后，下面写的逻辑端口 p 会实际监听在
-// B + (p - 9101)，也就是 B..B+42 这一段连续端口（测试用 test/lib/ports.mjs 动态申请）。
-// **不设置 MOCK_PORT_BASE 时行为与改动前逐位一致**（仍监听 9101..9143），
+// B + (p - 9101)，也就是 B..B+43 这一段连续端口（测试用 test/lib/ports.mjs 动态申请）。
+// **不设置 MOCK_PORT_BASE 时行为与改动前逐位一致**（仍监听 9101..9144），
 // 所以单独 `node test/mock-upstream.mjs` 或别的工具直接用它都不受影响。
 const PORT_BASE = Number(process.env.MOCK_PORT_BASE || 0);
 const PORT_REF = 9101;
@@ -736,6 +736,74 @@ start(9137, async (req, res) => {
     id: 'chatcmpl-latefallback', object: 'chat.completion', created: 1, model: body.model,
     choices: [{ index: 0, message: { role: 'assistant', content: 'from late fallback' }, finish_reason: 'stop' }],
     usage: { prompt_tokens: 1, completion_tokens: 2, total_tokens: 3 },
+  });
+});
+
+// ============================================================================
+// 9144: 按 key 区分行为的上游（测"一条渠道叠加多个 key，并行竞速"）
+// ============================================================================
+// 叠加 key 渠道会把同一个请求同时发给渠道里所有 key（各自带 Authorization: Bearer <key>）。
+// 本 mock 用 key 前缀模拟不同 key 的命运：
+//   sk-fast* 立刻成功    sk-slow* 延迟 250ms 后成功    sk-auth* 401    sk-boom* 500
+// /_stats 记录每个 key 的命中数（hits）与被取消数（aborted）：
+//   loser 被网关 abort 时响应还没写完，res 'close' 触发且 writableEnded 仍为 false -> 记一次 aborted。
+// 用例据此断言"三个 key 都收到了请求""慢 key 的请求确实被取消"。
+const mkHits = Object.create(null);
+const mkAborted = Object.create(null);
+start(9144, async (req, res) => {
+  const url = new URL(req.url, 'http://x');
+  if (url.pathname === '/_stats') return json(res, 200, { hits: mkHits, aborted: mkAborted });
+  if (url.pathname === '/_reset') {
+    for (const k of Object.keys(mkHits)) delete mkHits[k];
+    for (const k of Object.keys(mkAborted)) delete mkAborted[k];
+    return json(res, 200, { ok: true });
+  }
+  if (url.pathname === '/v1/models') {
+    return json(res, 200, { data: [{ id: 'mk-model' }, { id: 'fail-model' }, { id: 'strict-model' }] });
+  }
+  if (url.pathname !== '/v1/chat/completions') return json(res, 404, { error: { message: 'nf' } });
+
+  const key = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '');
+  mkHits[key] = (mkHits[key] || 0) + 1;
+  let recorded = false;
+  const recordAbort = () => {
+    if (recorded || res.writableEnded) return;
+    recorded = true;
+    mkAborted[key] = (mkAborted[key] || 0) + 1;
+  };
+  res.on('close', recordAbort);
+  req.on('aborted', recordAbort);
+
+  let raw = '';
+  for await (const c of req) raw += c;
+  const body = JSON.parse(raw || '{}');
+
+  if (key.startsWith('sk-auth')) {
+    return json(res, 401, { error: { message: 'invalid api key', type: 'authentication_error' } });
+  }
+  if (key.startsWith('sk-boom')) {
+    return json(res, 500, { error: { message: 'upstream boom for key ' + key, type: 'server_error' } });
+  }
+  const slow = key.startsWith('sk-slow');
+  if (slow) {
+    await new Promise((r) => setTimeout(r, 250));
+    if (res.writableEnded || res.destroyed || recorded) return; // 已被竞速对手淘汰
+  }
+  const tag = slow ? 'slow' : 'fast';
+  if (body.stream) {
+    res.writeHead(200, { 'content-type': 'text/event-stream' });
+    const chunk = (delta, finish = null) => `data: ${JSON.stringify({
+      id: 'chatcmpl-mk', object: 'chat.completion.chunk', created: 1, model: body.model,
+      choices: [{ index: 0, delta, finish_reason: finish }],
+    })}\n\n`;
+    res.write(chunk({ content: `${tag}-${key}` }));
+    res.write(chunk({}, 'stop'));
+    return res.end('data: [DONE]\n\n');
+  }
+  return json(res, 200, {
+    id: 'chatcmpl-mk', object: 'chat.completion', created: 1, model: body.model,
+    choices: [{ index: 0, message: { role: 'assistant', content: `${tag}-${key}` }, finish_reason: 'stop' }],
+    usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
   });
 });
 

@@ -14,8 +14,8 @@
  *   cleanupConfigs()            —— 立刻删掉上面生成的临时配置（进程退出时也会自动删）
  *
  * 关于 mock-upstream.mjs 的平移规则：
- *   该 mock 的逻辑端口是 9101..9143（9101=正常上游、9102=永远 500、……、9143=思考档位）。
- *   设 MOCK_PORT_BASE=B 时，逻辑端口 p 实际监听在 `B + (p - 9101)`，即 B..B+42 这段连续端口。
+ *   该 mock 的逻辑端口是 9101..9144（9101=正常上游、9102=永远 500、……、9143=思考档位、9144=叠加 key 竞速）。
+ *   设 MOCK_PORT_BASE=B 时，逻辑端口 p 实际监听在 `B + (p - 9101)`，即 B..B+43 这段连续端口。
  *   不设该环境变量时行为与改动前**逐位一致**（仍监听 9101..9143），所以其它工具/子代理
  *   单独直接跑 mock-upstream.mjs 不会受影响。
  *
@@ -34,8 +34,8 @@ import path from 'node:path';
 /** mock-upstream.mjs 的基准（逻辑）端口 */
 export const MOCK_REF_PORT = 9101;
 /** mock-upstream.mjs 用到的最大（逻辑）端口 */
-export const MOCK_MAX_PORT = 9143;
-/** 需要连续保留的端口个数：9101..9143 共 43 个 */
+export const MOCK_MAX_PORT = 9144;
+/** 需要连续保留的端口个数：9101..9144 共 44 个 */
 export const MOCK_PORT_SPAN = MOCK_MAX_PORT - MOCK_REF_PORT + 1;
 
 /** 本进程已经发出去过的端口，避免同一个测试里两次分配撞在一起 */

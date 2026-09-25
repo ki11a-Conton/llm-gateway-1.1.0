@@ -220,13 +220,19 @@ try {
 
   console.log('\n── C. 内容层：不含真实密钥 ──');
 
-  // C1. 模板文件的 apiKey 只能是占位形态
+  // C1. 模板文件的 apiKey / apiKeys 只能是占位形态
   const example = JSON.parse(readFileSync(path.join(ROOT, 'config.example.json'), 'utf8'));
   const PLACEHOLDER = /^(\$\{[A-Z0-9_]+\}|PROXY_MANAGED|TESTKEY|)$/;
   const chans = Array.isArray(example.channels) ? example.channels : [];
   const badKeys = chans.filter((c) => c.apiKey != null && !PLACEHOLDER.test(String(c.apiKey)));
   ok(`config.example.json 的 apiKey 全是占位（${chans.length} 个渠道）`,
     chans.length > 0 && badKeys.length === 0, JSON.stringify(badKeys.map((c) => c.apiKey)));
+  // 叠加 key（apiKeys 数组）同样只能是占位形态
+  const badMulti = chans.flatMap((c) => (Array.isArray(c.apiKeys) ? c.apiKeys : [])
+    .filter((k) => !PLACEHOLDER.test(String(k)))
+    .map((k) => `${c.name}:${k}`));
+  ok('config.example.json 的 apiKeys 全是占位',
+    badMulti.length === 0, JSON.stringify(badMulti));
 
   // C2. 密钥特征扫描：包内文本文件的命中必须全在「已知假 key」白名单
   const KNOWN_FAKE = new Map([
