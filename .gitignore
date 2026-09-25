@@ -18,6 +18,8 @@ logs-test/
 config.wbtest.json
 # AI 工具的记忆/会话元数据，不属于项目源码
 .workbuddy-ai/
+# AI 工具生成的 HTML 分享包产物（曾被自动提交误纳入），不属于项目源码
+.trae-html-share-packages/
 # 打包产物
 dist/
 # 内部任务书：含第三方渠道的私有端点与逆向结论，默认不公开。
