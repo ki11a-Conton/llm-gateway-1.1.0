@@ -1,7 +1,8 @@
 // 测试「叠 Key rotate-429（Key 内部轮转 + 429 快切）」专项回归（PLAN.md TASK 13）：
 //   单元级：环形游标 takeNextRequestKey() 的推进/回卷/渠道隔离 + Key 级错误分类
-//   HTTP 级：Case 1~9（首个成功 / 两连 429 后成功 / 环形回卷 / 慢响应耐心等 /
-//            整池 429 / 401 换 Key / 普通 400 不盲扫 / 并发摊开 / race 模式零回归）
+//   HTTP 级：Case 1~11（首个成功 / 两连 429 后成功 / 环形回卷 / 慢响应耐心等 /
+//            整池 429 / 401 换 Key / 普通 400 不盲扫 / 并发摊开 / race 模式零回归 /
+//            唯一候选渠道时整圈失败回 key#1 重扫 / 有兜底渠道时整圈失败立刻交回渠道级）
 //   注意：本文件只验证"一条渠道内部的 Key 调度"，不触碰渠道路由（见 test-multikey-rotate-routing.mjs）。
 import { spawn } from 'node:child_process';
 import path from 'node:path';
@@ -226,6 +227,39 @@ try {
   const s9 = await mockStats();
   ok('Case9 race 三个 Key 都被请求（真正并行）',
     ['sk-slow-r', 'sk-fast-r', 'sk-auth-r'].every((k) => (s9.hits[k] || 0) >= 1), JSON.stringify(s9.hits));
+  // ---- Case 10：唯一候选渠道 → 整圈 429 后回 key#1 重扫（本次新增行为）----
+  // mock 9106：前 N 次请求 429、之后成功。rot-lap-only 是唯一服务该 model 的渠道，
+  // 所以"整圈失败就交回渠道级"毫无意义（交回去还是它自己）→ 改为回到第一个 Key 重扫。
+  await fetch(mp.url(9106, '/_reset-flaky?fail=2'));
+  const m10a = (await metrics()).stackedKeys || {};
+  const r10 = await chat('rot-lap-only');
+  const m10b = (await metrics()).stackedKeys || {};
+  ok('Case10 唯一候选渠道：整圈 429 后重扫成功（agent 请求没有失败）',
+    r10.status === 200 && contentOf(r10).includes('flaky ok'), `${r10.status} ${contentOf(r10)}`);
+  ok('Case10 第 3 次尝试落在 key#1（真的回到第一个 Key，而不是停在 K2）',
+    r10.headers.get('x-gateway-key') === '1/2' && r10.headers.get('x-gateway-key-attempts') === '3',
+    `key=${r10.headers.get('x-gateway-key')} attempts=${r10.headers.get('x-gateway-key-attempts')}`);
+  ok('Case10 恰好回 K1 重扫 1 圈（stackedKeyLapRetries +1）',
+    (m10b.stackedKeyLapRetries || 0) - (m10a.stackedKeyLapRetries || 0) === 1,
+    `${m10a.stackedKeyLapRetries} -> ${m10b.stackedKeyLapRetries}`);
+  ok('Case10 总共只发了 3 次 Key 请求（第 1 圈 2 次 + 重扫 1 次）',
+    (m10b.stackedKeyAttempts || 0) - (m10a.stackedKeyAttempts || 0) === 3,
+    `${m10a.stackedKeyAttempts} -> ${m10b.stackedKeyAttempts}`);
+
+  // ---- Case 11：还有别的候选渠道 → 整圈失败立刻交回渠道级快速降级（既有语义不许回退）----
+  await fetch(mp.url(9106, '/_reset-flaky?fail=2'));
+  const m11a = (await metrics()).stackedKeys || {};
+  const r11 = await chat('rot-lap-multi');
+  const m11b = (await metrics()).stackedKeys || {};
+  ok('Case11 有兜底渠道时不重扫：直接降级到兜底渠道并成功',
+    r11.status === 200 && r11.headers.get('x-gateway-channel') === 'rot-lap-multi-fb',
+    `${r11.status} ${r11.headers.get('x-gateway-channel')}`);
+  ok('Case11 本渠道只发了 2 次 Key 请求（每个 Key 一次，没有重扫）',
+    (m11b.stackedKeyAttempts || 0) - (m11a.stackedKeyAttempts || 0) === 2,
+    `${m11a.stackedKeyAttempts} -> ${m11b.stackedKeyAttempts}`);
+  ok('Case11 没有发生回 K1 重扫（stackedKeyLapRetries 不变）',
+    (m11b.stackedKeyLapRetries || 0) === (m11a.stackedKeyLapRetries || 0),
+    `${m11a.stackedKeyLapRetries} -> ${m11b.stackedKeyLapRetries}`);
 } catch (err) {
   console.error('TEST ERROR', err);
   fail++;

@@ -103,6 +103,34 @@
       "stackedKeyStrategy": "rotate-429",
       "model": "rot-conc",
       "priority": 10
+    },
+    {
+      "_note": "整圈 429 后回 key#1 重扫（唯一候选渠道）：9106 = 前 N 次请求 429、之后成功。本 model 只有这一家渠道，所以 allowLapRetry=true。",
+      "name": "rot-lap-only",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9106",
+      "apiKeys": ["sk-lap-1", "sk-lap-2"],
+      "stackedKeyStrategy": "rotate-429",
+      "model": "rot-lap-only",
+      "priority": 10
+    },
+    {
+      "_note": "同上，但另有一家兜底渠道服务同一 model → 候选不止一家，整圈失败必须立刻交回渠道级快速降级（不允许重扫）。",
+      "name": "rot-lap-multi",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9106",
+      "apiKeys": ["sk-lapm-1", "sk-lapm-2"],
+      "stackedKeyStrategy": "rotate-429",
+      "model": "rot-lap-multi",
+      "priority": 10
+    },
+    {
+      "name": "rot-lap-multi-fb",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "k",
+      "model": "rot-lap-multi",
+      "priority": 99
     }
   ]
 }
