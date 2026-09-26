@@ -1,0 +1,75 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8797,
+    "apiKey": "TESTKEY"
+  },
+  "routing": {
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0
+  },
+  "routes": {
+    "alpha-model": ["fm-ok"]
+  },
+  "channels": [
+    {
+      "name": "fm-ok",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "k-ok",
+      "model": "alpha-model",
+      "priority": 10
+    },
+    {
+      "name": "fm-bare",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "modelsPath": "/models-bare",
+      "apiKey": "k-ok",
+      "model": "alpha-model",
+      "priority": 20
+    },
+    {
+      "name": "fm-anthropic",
+      "protocol": "anthropic",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "k-anth",
+      "model": "claude-x",
+      "priority": 30
+    },
+    {
+      "name": "fm-401",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "modelsPath": "/models-401",
+      "apiKey": "k-bad",
+      "model": "alpha-model",
+      "priority": 40
+    },
+    {
+      "name": "fm-empty",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "modelsPath": "/models-empty",
+      "apiKey": "k-ok",
+      "model": "alpha-model",
+      "priority": 50
+    },
+    {
+      "name": "fm-nokey",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "",
+      "model": "alpha-model",
+      "priority": 60
+    },
+    {
+      "name": "fm-envkey",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "${UNSET_ENV_VAR_FOR_FETCH_TEST}",
+      "model": "alpha-model",
+      "priority": 70
+    }
+  ]
+}

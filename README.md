@@ -24,6 +24,7 @@
 - **熔断 + 探活**：连续失败即熔断，指数退避，后台定时探活提前恢复
 - **模型池**：渠道用 `model` 字段绑定单模型，同名模型 = 多个备用渠道，自动故障切换
 - **模型自动发现**：启动时拉取各家的 `/v1/models`，不填白名单也能聚合；面板/接口可手动拉取并写回配置
+- **模型点选填入**：编辑/添加渠道时可按该渠道拉出上游真实模型名，直接点选，避免手打模型名填错
 - **自定义 provider 预设**：`providers.json` 里定义常用的供应商，渠道里一行 `preset` 引用，同名覆盖内置
 - **模型名映射**：`alias` 做渠道内改名，`modelMap` 做全局入站改名
 - **配置热重载**：改完 `config.json` 自动生效，不用重启
@@ -257,6 +258,7 @@ Anthropic 客户端（`/v1/messages`）传 `thinking: {type:"enabled", budget_to
 - **状态可切换**：编辑弹窗里可把渠道设为「停用（不参与路由，配置保留）」，再改回「启用」。
 - **补上 key 会自动重新启用**：之前因缺 apiKey 被自动停用的渠道，编辑时填上 key 保存后即恢复启用；只有未展开的 `${ENV}` 占位不会被写死成停用（否则环境变量注入后也永远起不来）。
 - **落盘前预检**：坏配置（非法 preset、自定义却没填 baseUrl、重名）直接报错并拒绝写入，不会把坏渠道写进 `config.json`。
+- **模型可以从上游拉出来点选**：模型字段旁的「**拉取上游模型**」按钮会去该渠道的上游 `/models` 拉真实模型名列成下拉，**点选即填入**——手打模型名是最容易填错的地方（上游 id 常带 `-reasoner` / `-v3.1` / `-preview` 之类后缀，错一个字符就是一路 404）。**添加渠道时（配置还没落盘）也能拉**；编辑时密钥框填了新 key 就用新 key，留空则沿用该渠道已保存的 key。**纯只读**，不改内存也不写配置，详见 §2.1.6。
 
 渠道卡片右上角「×」可删除（同样写回配置，并自动清理 `routes` 里的引用）。
 
@@ -270,9 +272,37 @@ PATCH  /api/channels/<name>    编辑渠道（部分更新；密钥字段留空/
                                PUT 同义。可编辑 name/preset/protocol/baseUrl/apiKey/apiKeys/stackedKeyStrategy/
                                model/effort/maxEffort/priority/description/enabled/proxy/refreshToken/headers
 DELETE /api/channels/<name>    删除渠道
+POST   /api/models/fetch       拉取某渠道的上游模型列表（**只读**，不写配置、不改运行时状态）
+                               body: {name} 用已保存渠道的端点/密钥；
+                                     或 {preset} / {baseUrl, protocol, apiKey?, apiKeys?} 用表单里还没落盘的值
+                               → {ok, models[], count, url}；上游失败时 ok:false + error（HTTP 非 2xx 才 400）
 ```
 
-#### 2.1.6 拉取模型（手动）
+#### 2.1.6 拉取模型
+
+**（a）面板上按渠道拉、点选填入（推荐，专治模型名手打填错）**
+
+编辑/添加渠道的弹窗里，「模型」输入框右边有个「**拉取上游模型**」按钮：点它就去**该渠道自己的上游** `/models` 拉真实模型名，列成下拉框，**点选即填入**模型框。相比手打，这样拿到的一定是上游认可的 id。
+
+- **添加渠道时也能拉**：配置还没落盘，按钮会把表单里的 `preset` / `baseUrl` / `protocol` 和刚填的 key 一起发给后端试拉。
+- **编辑时密钥留空就沿用原 key**：面板从不回显明文密钥，所以密钥框留空时后端用该渠道已保存的 key 去拉；填了新 key 则优先用新 key（改完还没保存也能先试拉一次）。
+- **纯只读**：不会改内存里的模型池，也不会写 `config.json`；换了预设或 baseUrl 后旧的列表会自动作废，避免拿着 A 家的列表去填 B 家。
+- 失败会显示人能看懂的原因（上游 HTTP 状态码 + 响应片段；没配 key 会额外提示）。
+
+对应接口：
+
+```bash
+# 用已保存的渠道拉（用该渠道自己的 key）
+curl -X POST http://127.0.0.1:8787/api/models/fetch \
+  -H 'content-type: application/json' -d '{"name":"deepseek"}'
+
+# 配置还没落盘时也能拉（表单里的值）
+curl -X POST http://127.0.0.1:8787/api/models/fetch \
+  -H 'content-type: application/json' \
+  -d '{"baseUrl":"https://api.example.com/v1","protocol":"openai","apiKey":"sk-xxx"}'
+```
+
+**（b）批量拉全部渠道并写回配置**
 
 模型自动发现之外，也可以手动触发并**回写配置**：
 
@@ -328,7 +358,7 @@ POST /api/workbuddy/batch   {"tokens": ["tk1","tk2",...], "model": "deepseek-v4.
 
 > 其它细节：余额接口 `/v2/billing/meter/get-user-resource`；定时续期/刷新由渠道后台任务驱动，失败只记日志不阻塞；上游 `discover` 不需要（预置单模型），模型列表接口 401 属预期。
 
-面板上的「拉取模型」和「拉取并保存」两个按钮就是这两个操作。注意：**没有配 apiKey 的渠道拉取会失败**，先填 key。
+面板上的「拉取模型」和「拉取并保存」两个按钮就是这两个操作。注意：**没有配 apiKey 的渠道拉取会失败**，先填 key。（想按单个渠道拉、并且是**点选填入模型**而不是批量刷新，用 §2.1.6(a) 的「拉取上游模型」。）
 
 #### 2.1.8 叠加 key（同一家多 key）——两种内部策略
 
@@ -622,6 +652,7 @@ llm-pi-ai:
 | GET | `/api/metrics` | loopback 免鉴权 | 并发/内存指标：全局与每渠道、每子代理在途与排队、排队超时计数。另有 `queueWait`（`queueWaitMsTotal` / `queueWaitMsMax` / `waitedCount`，**只在真正等到许可时结算**，排队超时的不虚增）与 `models`（每模型成功率、Top5 失败指纹、首字节 `ttfb` p50/p95）。某个耗时字段**没采到就不写这个键**，不会兜底成 0 |
 | POST | `/api/probe` | loopback 免鉴权 | 立即探活 + 重新发现模型 |
 | POST | `/api/discover` | loopback 免鉴权 | 拉取模型列表；`?save=1` 写回 config.json；`?channel=xx` 只拉指定渠道 |
+| POST | `/api/models/fetch` | loopback 免鉴权 | 拉取**单个**渠道的上游模型列表并**原样返回**（只读，不写配置）：`{name}` 用已保存渠道，或 `{preset}` / `{baseUrl, protocol, apiKey?}` 用还没落盘的表单值 → `{ok, models, count, url}` |
 | POST | `/api/reload` | loopback 免鉴权 | 重新加载 config.json |
 | POST | `/api/workbuddy/auth/start` | loopback 免鉴权 | WorkBuddy 设备码授权：签发 state + authUrl（获取 access token 的网址）；默认代理 127.0.0.1:7897（可用 `config.proxy` / `GW_PROXY` 覆盖） |
 | GET | `/api/workbuddy/auth/poll` | loopback 免鉴权 | 轮询授权结果：`?state=xx`；authorized 时自动落号渠道进 config.json |
@@ -661,6 +692,8 @@ x-gateway-agent: my-agent        （识别出子代理身份时回传）
 打开 <http://127.0.0.1:8787/>：每家渠道的健康/熔断/停用状态、成功率、平均延迟、模型数量、最近错误原因，5 秒自动刷新。按钮可以立即探活、重载配置。
 
 每张渠道卡片右上角有「**编辑**」和「**×**」两个按钮：编辑会把该渠道已保存的配置回填到弹窗里改完写回 `config.json`（密钥留空即保持不变），× 删除该渠道——详见 §2.1.5。
+
+弹窗里「模型」框旁边还有「**拉取上游模型**」按钮：按该渠道去上游拉真实模型名，**下拉点选即填入**，省得手打模型名填错——详见 §2.1.6(a)。
 
 页面底部是**任务日志**区块：任务数 / 整体失败 / 尝试级错误三个统计、错误指纹聚合芯片（如 `insufficient_balance × 3`），以及最近 15 条请求的完整选路链（`a✗ → b✗ → c` 表示 a、b 失败后换到 c），带错误摘要与耗时。数据来自 `logs/tasks.jsonl`，用 `grep` / `jq` 直接查。
 
@@ -752,6 +785,8 @@ node test/test-multikey-race.mjs           # 21  叠加 key：同 baseUrl 多 ke
 node test/test-multikey-rotate429.mjs      # 47  叠 Key rotate-429：环形游标 / 429 零等待快切 / 成功后游标前移 / 慢响应耐心等 / 整池 429 只扫一圈 / 401-402-403-5xx 换 Key / 普通 400 不盲扫 / 并发摊开 / race 零回归 / 响应头与叠 Key 指标
 node test/test-multikey-rotate-routing.mjs # 41  渠道路由零影响：多 Key(rotate-429) vs 单 Key 对照在 priority/round-robin/weighted/least-loaded/sticky/sessionAffinity/tiered 下渠道顺序逐位一致；Key 游标推进后顺序不变；HTTP 级 x-gateway-channel 序列与对照逐位一致
 node test/test-providers.mjs               # 12  自定义预设 + 模型拉取回写
+node test/test-edit-channel.mjs            # 46  编辑已保存渠道：字段窄写 / 密钥留空=不变 / 改名同步 routes / 自动启用 / ${ENV} 占位保护 / CSRF
+node test/test-fetch-models.mjs            # 34  按渠道拉上游模型：已保存渠道与未落盘表单值 / 自定义 modelsPath / Anthropic 头 / 401 与空列表 / 纯只读不改配置 / 不泄露密钥
 node test/test-admin-security.mjs          # 34  管理面安全：跨站 Origin 被拒 / 非法 Host 403 / 面板照常可用 / key 不外泄
 node test/test-metrics-observability.mjs   # 58  P3 验收：三段耗时分解 / 模型级指标 / 面板
 node test/test-cache-control.mjs           # 51  P4 验收：prompt caching 透传 + top_k 转发 + 思考预算（纯单元，不占端口）

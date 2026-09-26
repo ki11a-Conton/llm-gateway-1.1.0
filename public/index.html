@@ -112,6 +112,13 @@
   .modal-actions button { margin-left: auto; }
   .modal-actions button + button { margin-left: 0; }
   .form-err { color: var(--bad); font-size: 12px; flex: 1; }
+  /* 模型字段旁的「拉取模型」按钮：输入框吃掉剩余宽度，按钮不换行不挤压 */
+  .row-inline { display: flex; gap: 6px; align-items: center; }
+  .row-inline input { flex: 1; min-width: 0; }
+  .btn-inline { white-space: nowrap; padding: 7px 10px; font-size: 12px; }
+  /* 拉取到的模型下拉（默认隐藏，拉到才显示；display 由 JS 设成 flex） */
+  #f-model-picker-row { flex-direction: column; gap: 4px; }
+  #f-model-picker { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; }
   /* P3：模型级健康度表 + 耗时分解条（纯 CSS，零外部资源） */
   .mh { width: 100%; border-collapse: collapse; }
   .mh th, .mh td { text-align: left; padding: 6px 10px; border-top: 1px solid var(--line); font-size: 12px; }
@@ -252,7 +259,16 @@
       <label id="f-refresh-row" style="display:none">Refresh Token <input id="f-refresh" placeholder="可选（设备码授权自动回填；留空则不做自动续期）" /></label>
       <label id="f-userid-row" style="display:none">User ID <input id="f-userid" placeholder="可选（余额接口的 X-User-Id，授权自动回填）" /></label>
       <label>baseUrl <input id="f-baseurl" placeholder="https://api.example.com/v1（选预设后自动填）" /></label>
-      <label>模型 <input id="f-model" placeholder="绑定的单个模型，如 deepseek-chat" /></label>
+      <label>模型
+        <span class="row-inline">
+          <input id="f-model" placeholder="绑定的单个模型，如 deepseek-chat" />
+          <button type="button" id="f-fetch-models" class="btn-inline" title="从该渠道的上游 /models 拉取真实模型名，点选即填入，避免手打填错">拉取模型</button>
+        </span>
+      </label>
+      <div id="f-model-picker-row" style="display:none">
+        <select id="f-model-picker"></select>
+        <div class="hint" id="f-model-picker-hint"></div>
+      </div>
       <label>思考强度 <select id="f-effort">
         <option value="">不限制（任何强度请求都可用）</option>
         <option value="low">low</option>
@@ -858,6 +874,8 @@ function applyPresetFields() {
   $('f-userid-row').style.display = isWb ? 'flex' : 'none';
   $('wb-auth-info').textContent = '';
   $('f-model').placeholder = isWb ? '如 deepseek-v4.1-flash（默认）' : '绑定的单个模型，如 deepseek-chat';
+  // 换了预设 = 换了上游，之前拉到的模型列表作废
+  resetModelPicker();
 }
 // 添加模式下 API Key 文本域的原始提示（编辑模式下会换成"留空 = 保持不变"）
 const KEY_PLACEHOLDER_ADD = 'sk-...（留空则先停用）\nsk-...（填多个 key 时：同一 baseUrl 下按下方「Key 内部策略」调度）';
@@ -888,6 +906,69 @@ async function ensurePresets() {
   } catch (e) { toast('预设列表加载失败: ' + e.message); }
 }
 
+/** 模型下拉：拉到上游列表后才显示；换预设/端点会让列表作废，必须重新拉 */
+function resetModelPicker(hintText = '') {
+  $('f-model-picker-row').style.display = 'none';
+  $('f-model-picker').innerHTML = '';
+  $('f-model-picker-hint').textContent = hintText;
+}
+
+/**
+ * 从上游 /models 拉真实模型名，点选即填入「模型」框 —— 专治手打模型名填错。
+ * 请求按"表单当前状态"组装：
+ *   - 编辑已保存渠道时传 name，后端用它已存的密钥（面板从不回显明文）
+ *   - 添加模式直接传 preset / baseUrl / protocol + 刚填的 key
+ * 表单里填了新 key 就优先用新 key，所以"改完还没保存"也能先试拉一次。
+ */
+async function fetchUpstreamModelsForForm() {
+  const btn = $('f-fetch-models');
+  const preset = $('f-preset').value;
+  const baseUrl = $('f-baseurl').value.trim();
+  const keys = $('f-key').value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
+
+  if (!preset && !baseUrl) {
+    $('f-err').textContent = '请先选预设或填 baseUrl，否则不知道去哪拉模型';
+    return;
+  }
+  const body = {};
+  // 只有「编辑已保存渠道」才传 name：添加模式里 f-name 是还没落盘的新名字，
+  // 传过去后端只会回"渠道不存在"。添加模式全靠 preset/baseUrl + 表单里刚填的 key。
+  if (EDITING) body.name = EDITING;
+  if (preset) body.preset = preset;
+  else { body.baseUrl = baseUrl; body.protocol = $('f-protocol').value; }
+  if (keys.length) { body.apiKey = keys[0]; body.apiKeys = keys; }
+
+  const label = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '拉取中…';
+  $('f-err').textContent = '';
+  try {
+    const r = await api('/api/models/fetch', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!r?.ok) {
+      resetModelPicker();
+      $('f-err').textContent = '拉取模型失败：' + (r?.error || '未知错误');
+      return;
+    }
+    $('f-model-picker').innerHTML = `<option value="">— 选择模型（共 ${r.count} 个）—</option>`
+      + r.models.map((m) => `<option value="${escapeHtml(m)}">${escapeHtml(m)}</option>`).join('');
+    // 已经填了模型且确实在列表里就预选中，避免看起来像"没拉到"
+    const cur = $('f-model').value.trim();
+    $('f-model-picker').value = cur && r.models.includes(cur) ? cur : '';
+    $('f-model-picker-row').style.display = 'flex';
+    $('f-model-picker-hint').textContent = `已从上游拉到 ${r.count} 个模型，选一个即填入「模型」框`;
+  } catch (e) {
+    resetModelPicker();
+    $('f-err').textContent = '拉取模型失败：' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = label;
+  }
+}
+
 async function openAddModal(presetName = '') {
   EDITING = null;
   EDIT_ORIG = null;
@@ -902,6 +983,7 @@ async function openAddModal(presetName = '') {
   $('f-maxeffort').value = '';
   $('f-key-strategy').value = 'race';
   $('f-preset').value = presetName || '';
+  resetModelPicker();
   applyPresetFields();
   $('wb-auth-row').style.display = presetName === 'workbuddy-intl' ? 'block' : 'none';
   updateKeyStrategyRow();
@@ -914,6 +996,7 @@ async function openEditModal(name) {
   EDITING = name;
   $('add-modal').style.display = 'flex';
   $('f-err').textContent = '';
+  resetModelPicker();
   setModalMode('edit');
   await ensurePresets();
   // 先按预设联动（切显示行），再逐字段回填真实值，避免被预设默认值覆盖
@@ -989,6 +1072,15 @@ $('wb-batch-submit').onclick = async () => {
 $('f-cancel').onclick = closeAddModal;
 $('add-modal').onclick = (e) => { if (e.target === $('add-modal')) closeAddModal(); };
 $('f-preset').onchange = applyPresetFields;
+// 「拉取模型」：从上游 /models 拉真实模型名点选填入，避免手打模型名填错。
+// 手填 baseUrl 时也要作废已拉到的列表（换了上游，列表就不对了）。
+$('f-fetch-models').onclick = fetchUpstreamModelsForForm;
+$('f-model-picker').onchange = () => {
+  const v = $('f-model-picker').value;
+  if (v) $('f-model').value = v;
+};
+$('f-baseurl').oninput = () => resetModelPicker();
+$('f-protocol').onchange = () => resetModelPicker();
 // 叠 Key 内部策略字段：只在"有效 key 数量 > 1"时才出现（单 key 渠道没有 Key 策略可言）。
 // 编辑模式下密钥留空 = 沿用该渠道原有的 key，所以要用原 keyCount 兜底，
 // 否则"多 Key 渠道"的策略行会凭空消失、策略也改不动。

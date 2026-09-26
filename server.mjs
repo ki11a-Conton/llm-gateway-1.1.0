@@ -454,6 +454,24 @@ const server = http.createServer(async (req, res) => {
       }));
       return sendJson(res, 200, { presets });
     }
+    // 拉取上游模型列表（面板弹窗里的「拉取上游模型」按钮）：只读，不改配置、不改运行时状态。
+    // 既支持已保存渠道（传 name），也支持"还没保存的表单值"（传 preset/baseUrl/apiKey），
+    // 这样添加渠道时也能先拉列表点选，不用手打模型名（手打最容易填错）。
+    if (pathname === '/api/models/fetch' && req.method === 'POST') {
+      if (!trusted) return unauthorized(res);
+      let b;
+      try {
+        b = await readJsonBody(req);
+      } catch (err) {
+        return sendJson(res, 400, { ok: false, error: err.message });
+      }
+      try {
+        return sendJson(res, 200, await manager.fetchUpstreamModels(b || {}));
+      } catch (err) {
+        // 配置本身非法（缺 baseUrl / 非法 preset / 渠道不存在）走 400；上游层面的失败在 200 里带 ok:false
+        return sendJson(res, 400, { ok: false, models: [], count: 0, error: err.message });
+      }
+    }
     if (pathname === '/api/channels' && req.method === 'POST') {
       if (!trusted) return unauthorized(res);
       let b;
