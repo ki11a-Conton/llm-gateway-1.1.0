@@ -65,7 +65,7 @@
   .b-warn { background: var(--warn-bg); color: var(--warn); }
   .b-bad { background: var(--bad-bg); color: var(--bad); }
   .b-idle { background: var(--idle-bg); color: var(--idle); }
-  .proto { margin-left: auto; font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 1px 7px; border-radius: 5px; }
+  .proto { font-size: 11px; color: var(--muted); border: 1px solid var(--line); padding: 1px 7px; border-radius: 5px; }
   .ch-url { color: var(--muted); font-size: 12px; margin-top: 4px; word-break: break-all; font-family: ui-monospace, Menlo, Consolas, monospace; }
   .ch-metrics { display: flex; gap: 16px; margin-top: 10px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
   .ch-metrics b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
@@ -93,8 +93,11 @@
   .pool-ch em { font-style: normal; font-size: 11px; color: var(--muted); }
   .hint { font-size: 12px; font-weight: 400; color: var(--muted); }
   .effort-tag { font-size: 11px; padding: 1px 7px; border-radius: 20px; background: #eef2ff; color: #4f46e5; font-weight: 600; white-space: nowrap; }
-  .ch-del { margin-left: auto; border: none; background: none; color: var(--muted); font-size: 15px; padding: 0 4px; cursor: pointer; line-height: 1; }
+  .ch-del { border: none; background: none; color: var(--muted); font-size: 15px; padding: 0 4px; cursor: pointer; line-height: 1; }
   .ch-del:hover { color: var(--bad); background: none; }
+  .ch-edit { border: none; background: none; color: var(--muted); font-size: 12px; padding: 0 4px; cursor: pointer; line-height: 1; }
+  .ch-edit:hover { color: var(--accent); background: none; text-decoration: underline; }
+  .ch-actions { margin-left: auto; display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
   .modal-mask { position: fixed; inset: 0; background: rgba(15,18,22,.45); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal { background: #fff; border-radius: 14px; padding: 22px 24px; width: 440px; max-width: calc(100vw - 40px); max-height: 90vh; overflow: auto; box-shadow: 0 20px 50px rgba(0,0,0,.18); }
   .modal h3 { margin: 0 0 16px; font-size: 16px; }
@@ -221,7 +224,7 @@
 
 <div class="modal-mask" id="add-modal" style="display:none">
   <div class="modal">
-    <h3>添加供应商</h3>
+    <h3 id="modal-title">添加供应商</h3>
     <div class="form">
       <label>预设 <select id="f-preset"><option value="">自定义（手填 baseUrl）</option></select></label>
       <label id="f-protocol-row" style="display:none">协议 <select id="f-protocol">
@@ -265,6 +268,12 @@
       </select></label>
       <label>优先级 <input id="f-priority" type="number" value="100" /></label>
       <label>备注 <input id="f-desc" placeholder="可选" /></label>
+      <label id="f-enabled-row" style="display:none">状态
+        <select id="f-enabled">
+          <option value="true">启用（参与路由）</option>
+          <option value="false">停用（不参与路由，配置保留）</option>
+        </select>
+      </label>
     </div>
     <div class="modal-actions">
       <span class="form-err" id="f-err"></span>
@@ -303,6 +312,9 @@
 <script>
 const $ = (id) => document.getElementById(id);
 let KEY = localStorage.getItem('gw_key') || '';
+let SNAP = null;        // 最近一次 /api/status 快照（编辑弹窗回填用）
+let EDITING = null;     // 编辑模式下的「原始渠道名」；null = 添加模式
+let EDIT_ORIG = null;   // 编辑模式下的原始 preset/baseUrl/protocol，用于判断哪些字段真的被改动
 
 function toast(msg) {
   const t = $('toast');
@@ -366,7 +378,10 @@ function render(data) {
           ${c.creditRemain != null ? `<span class="badge b-idle" title="账号剩余额度（每小时自动刷新）">余额 ${c.creditRemain}</span>` : ''}
           ${c.keyCount > 1 ? `<span class="badge b-idle" title="叠 Key 内部策略（只影响这条渠道内部用哪个 Key，不影响渠道之间的路由）：${c.stackedKeyStrategy === 'rotate-429' ? 'Key 内部轮转 + 429 快切，一次只用 1 个 Key' : '全量并发竞速，所有 Key 同时发'}">叠加 ${c.keyCount} key · ${c.stackedKeyStrategy === 'rotate-429' ? '429快切' : '竞速'}</span>` : ''}
           <span class="proto">${escapeHtml(c.protocol)}</span>
-          <button class="ch-del" data-del="${escapeHtml(c.name)}" title="从 config.json 删除该渠道">×</button>
+          <span class="ch-actions">
+            <button class="ch-edit" data-edit="${escapeHtml(c.name)}" title="编辑该渠道配置（写回 config.json，密钥留空即保持不变）">编辑</button>
+            <button class="ch-del" data-del="${escapeHtml(c.name)}" title="从 config.json 删除该渠道">×</button>
+          </span>
         </div>
         <div class="ch-url">${escapeHtml(c.baseUrl)}</div>
         <div class="ch-metrics">${metrics}</div>
@@ -400,6 +415,7 @@ function escapeHtml(s) {
 async function refresh() {
   try {
     const data = await api('/api/status');
+    SNAP = data;   // 缓存最近快照：编辑弹窗回填用
     $('keybar').style.display = 'none';
     // 服务端只回掩码（完整 apiKey 不再下发），面板仅作"配了哪个 key"的提示
     if (data.server?.apiKeyMasked) $('apikey').textContent = data.server.apiKeyMasked;
@@ -843,24 +859,97 @@ function applyPresetFields() {
   $('wb-auth-info').textContent = '';
   $('f-model').placeholder = isWb ? '如 deepseek-v4.1-flash（默认）' : '绑定的单个模型，如 deepseek-chat';
 }
+// 添加模式下 API Key 文本域的原始提示（编辑模式下会换成"留空 = 保持不变"）
+const KEY_PLACEHOLDER_ADD = 'sk-...（留空则先停用）\nsk-...（填多个 key 时：同一 baseUrl 下按下方「Key 内部策略」调度）';
+
+/** 弹窗双模式：add = 新增供应商，edit = 编辑已保存的渠道 */
+function setModalMode(mode) {
+  const editing = mode === 'edit';
+  $('modal-title').textContent = editing ? '编辑供应商' : '添加供应商';
+  $('f-submit').textContent = editing ? '保存修改' : '添加';
+  $('f-enabled-row').style.display = editing ? 'flex' : 'none';
+  // 编辑模式绝不回显明文密钥：留空 = 保持不变，粘贴新值才替换
+  $('f-key').placeholder = editing
+    ? '留空 = 保持原 Key 不变（粘贴新 Key 才会替换）'
+    : KEY_PLACEHOLDER_ADD;
+  $('f-refresh').placeholder = editing
+    ? '留空 = 保持原 Refresh Token 不变'
+    : '可选（设备码授权自动回填；留空则不做自动续期）';
+}
+
+/** 预设下拉只加载一次 */
+async function ensurePresets() {
+  if (PRESETS.length) return;
+  try {
+    const r = await api('/api/presets');
+    PRESETS = r.presets || [];
+    $('f-preset').innerHTML = '<option value="">自定义（手填 baseUrl）</option>'
+      + PRESETS.map((p) => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}${p.description ? ' · ' + escapeHtml(p.description) : ''}</option>`).join('');
+  } catch (e) { toast('预设列表加载失败: ' + e.message); }
+}
+
 async function openAddModal(presetName = '') {
+  EDITING = null;
+  EDIT_ORIG = null;
   $('add-modal').style.display = 'flex';
   $('f-err').textContent = '';
+  setModalMode('add');
+  await ensurePresets();
+  // 清掉上一次编辑/添加的残留值，避免串味
+  ['f-name', 'f-key', 'f-model', 'f-desc', 'f-refresh', 'f-userid', 'f-baseurl'].forEach((id) => ($(id).value = ''));
+  $('f-priority').value = 100;
+  $('f-effort').value = '';
+  $('f-maxeffort').value = '';
+  $('f-key-strategy').value = 'race';
+  $('f-preset').value = presetName || '';
+  applyPresetFields();
+  $('wb-auth-row').style.display = presetName === 'workbuddy-intl' ? 'block' : 'none';
   updateKeyStrategyRow();
-  if (!PRESETS.length) {
-    try {
-      const r = await api('/api/presets');
-      PRESETS = r.presets || [];
-      $('f-preset').innerHTML = '<option value="">自定义（手填 baseUrl）</option>'
-        + PRESETS.map((p) => `<option value="${escapeHtml(p.name)}">${escapeHtml(p.name)}${p.description ? ' · ' + escapeHtml(p.description) : ''}</option>`).join('');
-    } catch (e) { toast('预设列表加载失败: ' + e.message); }
-  }
-  if (presetName) {
-    $('f-preset').value = presetName;
-    applyPresetFields();
-  }
 }
-function closeAddModal() { $('add-modal').style.display = 'none'; }
+
+/** 打开「编辑供应商」：把该渠道已保存的配置回填进同一个弹窗 */
+async function openEditModal(name) {
+  const ch = (SNAP?.channels || []).find((c) => c.name === name);
+  if (!ch) { toast('找不到渠道 ' + name + '，请稍候重试'); return; }
+  EDITING = name;
+  $('add-modal').style.display = 'flex';
+  $('f-err').textContent = '';
+  setModalMode('edit');
+  await ensurePresets();
+  // 先按预设联动（切显示行），再逐字段回填真实值，避免被预设默认值覆盖
+  $('f-preset').value = ch.preset || '';
+  applyPresetFields();
+  $('f-name').value = ch.name;
+  $('f-baseurl').value = ch.baseUrl || '';
+  $('f-protocol').value = ch.protocol || 'openai';
+  // 单模型渠道才有可回填的 model；自动发现渠道留空 = 继续自动发现
+  $('f-model').value = ch.singleModel ? (ch.models?.[0] || '') : '';
+  $('f-effort').value = ch.effort || '';
+  $('f-maxeffort').value = ch.maxEffort || '';
+  $('f-priority').value = ch.priority ?? 100;
+  $('f-desc').value = ch.description || '';
+  $('f-enabled').value = ch.enabled ? 'true' : 'false';
+  $('f-userid').value = ch.userId || '';
+  // 记录原始 preset/baseUrl/protocol：提交时只在"真的改了"的情况下才回传，
+  // 否则服务端归一化后的 baseUrl（补 /v1）会被无谓写回配置
+  EDIT_ORIG = { preset: ch.preset || '', baseUrl: ch.baseUrl || '', protocol: ch.protocol || 'openai' };
+  // 密钥类字段一律留空（服务端只回长度/掩码，不回明文）
+  $('f-key').value = '';
+  $('f-refresh').value = '';
+  if (ch.keyCount > 1 && ch.stackedKeyStrategy) $('f-key-strategy').value = ch.stackedKeyStrategy;
+  // 编辑模式不提供设备码授权（避免误触发重新落号）
+  $('wb-auth-row').style.display = 'none';
+  $('wb-auth-info').textContent = '';
+  updateKeyStrategyRow();
+}
+
+function closeAddModal() {
+  $('add-modal').style.display = 'none';
+  EDITING = null;
+  EDIT_ORIG = null;
+  setModalMode('add');
+  $('f-err').textContent = '';
+}
 $('btn-add').onclick = () => openAddModal();
 $('btn-add-wb').onclick = () => {
   $('wb-modal').style.display = 'flex';
@@ -900,9 +989,17 @@ $('wb-batch-submit').onclick = async () => {
 $('f-cancel').onclick = closeAddModal;
 $('add-modal').onclick = (e) => { if (e.target === $('add-modal')) closeAddModal(); };
 $('f-preset').onchange = applyPresetFields;
-// 叠 Key 内部策略字段：只在"填了多个 key"时才出现（单 key 渠道没有 Key 策略可言）
+// 叠 Key 内部策略字段：只在"有效 key 数量 > 1"时才出现（单 key 渠道没有 Key 策略可言）。
+// 编辑模式下密钥留空 = 沿用该渠道原有的 key，所以要用原 keyCount 兜底，
+// 否则"多 Key 渠道"的策略行会凭空消失、策略也改不动。
+function effectiveKeyCount() {
+  const typed = $('f-key').value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean).length;
+  if (typed) return typed;
+  if (!EDITING) return 0;
+  return (SNAP?.channels || []).find((c) => c.name === EDITING)?.keyCount || 0;
+}
 function updateKeyStrategyRow() {
-  const multi = $('f-key').value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean).length > 1;
+  const multi = effectiveKeyCount() > 1;
   $('f-key-strategy-row').style.display = multi ? 'flex' : 'none';
   $('f-key-strategy-hint').style.display = multi ? 'block' : 'none';
 }
@@ -946,43 +1043,75 @@ $('f-submit').onclick = async () => {
   const keys = $('f-key').value.split(/[\r\n,]+/).map((s) => s.trim()).filter(Boolean);
   const payload = {
     name: $('f-name').value.trim(),
-    apiKey: keys[0] ?? '',
-    apiKeys: keys,
     model: $('f-model').value.trim(),
     effort: $('f-effort').value,
     maxEffort: $('f-maxeffort').value,
     priority: Number($('f-priority').value) || 100,
     description: $('f-desc').value.trim(),
   };
-  // 只对多 Key 渠道带上 Key 内部策略；单 Key 不写（后端也会归一为 race）
-  if (keys.length > 1) payload.stackedKeyStrategy = $('f-key-strategy').value;
+  // 密钥留空分两种模式解释：添加 = 不带 key（后端落成"未配置、自动停用"）；
+  // 编辑 = 不带 key（后端解释为"保持不变"——面板从不回显明文，空值不能当成清空）
+  if (keys.length) {
+    payload.apiKey = keys[0];
+    payload.apiKeys = keys;
+  }
+  // 只对多 Key 渠道带上 Key 内部策略；单 Key 不写（后端也会归一为 race）。
+  // 用 effectiveKeyCount：编辑模式下密钥留空沿用原 key，此时策略仍可改。
+  if (effectiveKeyCount() > 1) payload.stackedKeyStrategy = $('f-key-strategy').value;
   if (isWb) {
     const uid = $('f-userid').value.trim();
     const rt = $('f-refresh').value.trim();
-    if (uid) payload.headers = { 'X-User-Id': uid };
-    if (rt) payload.refreshToken = rt;
+    payload.headers = { 'X-User-Id': uid };   // 空串 = 清除该头
+    if (rt) payload.refreshToken = rt;        // 留空 = 保持原 token 不变
     if (!payload.model) payload.model = 'deepseek-v4.1-flash';
   }
-  if (preset) payload.preset = preset;
-  else {
-    payload.baseUrl = $('f-baseurl').value.trim();
-    payload.protocol = $('f-protocol').value;
+  payload.preset = preset;                    // 空串 = 自定义（手填 baseUrl）
+  if (!preset) {
+    const baseUrl = $('f-baseurl').value.trim();
+    const protocol = $('f-protocol').value;
+    // 编辑模式下只在"真的改了"（或从预设切成自定义）时才回传端点字段：
+    // 回填的是运行时归一化后的 baseUrl（可能被补上 /v1），原样回传会造成无谓的配置改动。
+    const endpointChanged = !EDITING
+      || preset !== EDIT_ORIG.preset
+      || baseUrl !== EDIT_ORIG.baseUrl
+      || protocol !== EDIT_ORIG.protocol;
+    if (endpointChanged) {
+      payload.baseUrl = baseUrl;
+      payload.protocol = protocol;
+    }
   }
   try {
-    const r = await api('/api/channels', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    toast(`已添加渠道 ${r.channel?.name || payload.name}`);
+    let r;
+    if (EDITING) {
+      // 编辑：PATCH 到原始渠道名（name 字段里可能是改后的新名）
+      payload.enabled = $('f-enabled').value === 'true';
+      r = await api('/api/channels/' + encodeURIComponent(EDITING), {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      toast(`已保存渠道 ${r.channel?.name || payload.name}`);
+    } else {
+      r = await api('/api/channels', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      toast(`已添加渠道 ${r.channel?.name || payload.name}`);
+    }
     closeAddModal();
     ['f-name', 'f-key', 'f-model', 'f-desc'].forEach((id) => ($(id).value = ''));
     refresh();
   } catch (e) { $('f-err').textContent = e.message; }
 };
 
-// 删除渠道（事件委托）
+// 编辑 / 删除渠道（事件委托）
 $('channels').addEventListener('click', async (e) => {
+  const editBtn = e.target.closest('[data-edit]');
+  if (editBtn) {
+    openEditModal(editBtn.getAttribute('data-edit'));
+    return;
+  }
   const btn = e.target.closest('[data-del]');
   if (!btn) return;
   const name = btn.getAttribute('data-del');

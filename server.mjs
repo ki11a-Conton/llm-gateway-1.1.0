@@ -469,11 +469,28 @@ const server = http.createServer(async (req, res) => {
         return sendJson(res, 400, { ok: false, error: err.message });
       }
     }
-    const delMatch = pathname.match(/^\/api\/channels\/([^/]+)$/);
-    if (delMatch && req.method === 'DELETE') {
+    const chMatch = pathname.match(/^\/api\/channels\/([^/]+)$/);
+    // 编辑已保存的渠道（面板"编辑"按钮）：按字段窄写回 config.json 并热重载。
+    // PATCH = 部分更新语义；同时兼容 PUT（整体更新），两者都走同一个窄写实现。
+    if (chMatch && (req.method === 'PATCH' || req.method === 'PUT')) {
+      if (!trusted) return unauthorized(res);
+      let b;
+      try {
+        b = await readJsonBody(req);
+      } catch (err) {
+        return sendJson(res, 400, { ok: false, error: err.message });
+      }
+      try {
+        const channel = manager.updateChannel(decodeURIComponent(chMatch[1]), b || {});
+        return sendJson(res, 200, { ok: true, channel });
+      } catch (err) {
+        return sendJson(res, 400, { ok: false, error: err.message });
+      }
+    }
+    if (chMatch && req.method === 'DELETE') {
       if (!trusted) return unauthorized(res);
       try {
-        manager.removeChannel(decodeURIComponent(delMatch[1]));
+        manager.removeChannel(decodeURIComponent(chMatch[1]));
         return sendJson(res, 200, { ok: true });
       } catch (err) {
         return sendJson(res, 400, { ok: false, error: err.message });

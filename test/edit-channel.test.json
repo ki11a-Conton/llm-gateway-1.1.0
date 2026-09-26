@@ -1,0 +1,56 @@
+{
+  "server": {
+    "host": "127.0.0.1",
+    "port": 8796,
+    "apiKey": "TESTKEY"
+  },
+  "routing": {
+    "probeIntervalMs": 0,
+    "discoverIntervalMs": 0
+  },
+  "routes": {
+    "deepseek-chat": ["edit-a"]
+  },
+  "channels": [
+    {
+      "name": "edit-a",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "orig-key",
+      "model": "deepseek-chat",
+      "priority": 10,
+      "description": "原始备注"
+    },
+    {
+      "name": "edit-preset",
+      "preset": "deepseek",
+      "apiKey": "preset-key",
+      "priority": 30
+    },
+    {
+      "name": "edit-nokey",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "",
+      "model": "deepseek-chat",
+      "priority": 40
+    },
+    {
+      "name": "edit-disabled",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "",
+      "enabled": false,
+      "model": "deepseek-chat",
+      "priority": 50
+    },
+    {
+      "name": "edit-env",
+      "protocol": "openai",
+      "baseUrl": "http://127.0.0.1:9101",
+      "apiKey": "${UNSET_ENV_VAR_FOR_TEST}",
+      "model": "deepseek-chat",
+      "priority": 60
+    }
+  ]
+}

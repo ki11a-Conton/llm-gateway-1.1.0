@@ -245,9 +245,20 @@ curl ... -d '{"model":"deepseek-chat","reasoning_effort":"high","messages":[...]
 
 Anthropic 客户端（`/v1/messages`）传 `thinking: {type:"enabled", budget_tokens: N}` 同样生效，按 budget 折算档位。
 
-#### 2.1.5 面板添加 / 删除供应商
+#### 2.1.5 面板添加 / 编辑 / 删除供应商
 
-面板右上角「**＋ 添加供应商**」：预设下拉选「自定义（手填 baseUrl）」时可选**协议**（OpenAI 兼容 / Anthropic 原生），再填渠道名 + apiKey + baseUrl + 绑定模型 + 思考强度 + 优先级，提交后直接写回 `config.json` 并热重载，不用手动编辑文件。**API Key 是多行文本域（每行一个 key）**——填多个即落成 §2.1.8 的叠加 key 渠道，渠道卡片上显示「叠加 N key」。渠道卡片右上角「×」可删除（同样写回配置，并自动清理 `routes` 里的引用）。
+面板右上角「**＋ 添加供应商**」：预设下拉选「自定义（手填 baseUrl）」时可选**协议**（OpenAI 兼容 / Anthropic 原生），再填渠道名 + apiKey + baseUrl + 绑定模型 + 思考强度 + 优先级，提交后直接写回 `config.json` 并热重载，不用手动编辑文件。**API Key 是多行文本域（每行一个 key）**——填多个即落成 §2.1.8 的叠加 key 渠道，渠道卡片上显示「叠加 N key」。
+
+**编辑已保存的渠道**：渠道卡片右上角「**编辑**」按钮打开同一个弹窗，标题变成「编辑供应商」，并把该渠道**已保存的配置回填**（预设 / 渠道名 / baseUrl / 协议 / 绑定模型 / 思考强度 / 最高档位 / 优先级 / 备注 / 状态），改完点「保存修改」即写回 `config.json` 并热重载。几条约定：
+
+- **密钥留空 = 保持不变**：面板**从不回显明文密钥**（`/api/status` 只回 `refreshToken` 的长度和 `userId`），所以 apiKey / refreshToken 输入框在编辑模式下是空的，**留空表示沿用原值**，粘贴新值才会替换；想清空就删掉这条渠道重建。
+- **可以改名**：改名时 `routes` 里对该渠道的旧名引用会**自动同步改成新名**，不留悬空引用。
+- **字段窄写**：只覆盖你实际改动的字段，其余（`headers` / `chatPath` / `timeoutMs` / 余额等运行时字段）原样保留；把「备注」「绑定模型」等清空 = 删除该字段（回到跟随全局 / 自动发现）。
+- **状态可切换**：编辑弹窗里可把渠道设为「停用（不参与路由，配置保留）」，再改回「启用」。
+- **补上 key 会自动重新启用**：之前因缺 apiKey 被自动停用的渠道，编辑时填上 key 保存后即恢复启用；只有未展开的 `${ENV}` 占位不会被写死成停用（否则环境变量注入后也永远起不来）。
+- **落盘前预检**：坏配置（非法 preset、自定义却没填 baseUrl、重名）直接报错并拒绝写入，不会把坏渠道写进 `config.json`。
+
+渠道卡片右上角「×」可删除（同样写回配置，并自动清理 `routes` 里的引用）。
 
 对应 HTTP 接口：
 
@@ -255,6 +266,9 @@ Anthropic 客户端（`/v1/messages`）传 `thinking: {type:"enabled", budget_to
 GET    /api/presets            列出可用预设
 POST   /api/channels           添加渠道 {name, preset?, baseUrl?, apiKey?, apiKeys?, model?, effort?, priority?, description?}
                                （apiKey 支持多行/逗号分隔；多个 key -> apiKeys 叠加竞速）
+PATCH  /api/channels/<name>    编辑渠道（部分更新；密钥字段留空/不传 = 保持不变，name 可改并同步 routes）
+                               PUT 同义。可编辑 name/preset/protocol/baseUrl/apiKey/apiKeys/stackedKeyStrategy/
+                               model/effort/maxEffort/priority/description/enabled/proxy/refreshToken/headers
 DELETE /api/channels/<name>    删除渠道
 ```
 
@@ -645,6 +659,8 @@ x-gateway-agent: my-agent        （识别出子代理身份时回传）
 ## 5. 状态面板
 
 打开 <http://127.0.0.1:8787/>：每家渠道的健康/熔断/停用状态、成功率、平均延迟、模型数量、最近错误原因，5 秒自动刷新。按钮可以立即探活、重载配置。
+
+每张渠道卡片右上角有「**编辑**」和「**×**」两个按钮：编辑会把该渠道已保存的配置回填到弹窗里改完写回 `config.json`（密钥留空即保持不变），× 删除该渠道——详见 §2.1.5。
 
 页面底部是**任务日志**区块：任务数 / 整体失败 / 尝试级错误三个统计、错误指纹聚合芯片（如 `insufficient_balance × 3`），以及最近 15 条请求的完整选路链（`a✗ → b✗ → c` 表示 a、b 失败后换到 c），带错误摘要与耗时。数据来自 `logs/tasks.jsonl`，用 `grep` / `jq` 直接查。
 
